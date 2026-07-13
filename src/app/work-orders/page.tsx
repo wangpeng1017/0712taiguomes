@@ -24,6 +24,8 @@ export default async function WorkOrdersPage() {
     produced: wo.produced,
     completionRate: wo.completionRate,
     batchCount: wo.batchCount,
+    bomVersion: wo.bomVersion,
+    route: wo.route,
     note: wo.note,
   }));
 

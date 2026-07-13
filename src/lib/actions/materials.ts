@@ -91,3 +91,53 @@ export async function createDefectIsolation(input: { batchId: string; qty: numbe
   revalidatePath("/report");
   revalidatePath("/trace");
 }
+
+export async function updateMaterialLot(input: {
+  id: string; supplierLot?: string; supplier?: string; inspectStatus: string; stockStatus: string; warehouse?: string;
+}) {
+  const lot = await prisma.materialLot.findUniqueOrThrow({ where: { id: input.id } });
+  if (!["待检", "合格", "不合格", "让步接收"].includes(input.inspectStatus)) throw new Error("无效的检验状态");
+  if (!["可用", "冻结", "隔离", "已消耗"].includes(input.stockStatus)) throw new Error("无效的库存状态");
+  if (input.stockStatus === "已消耗" && lot.remainingQty > 0) throw new Error("仍有剩余数量的批次不可标记为已消耗");
+  await prisma.materialLot.update({
+    where: { id: input.id },
+    data: {
+      supplierLot: input.supplierLot?.trim() || null, supplier: input.supplier?.trim() || null,
+      inspectStatus: input.inspectStatus, stockStatus: input.stockStatus, warehouse: input.warehouse?.trim() || null,
+    },
+  });
+  for (const path of ["/materials", "/injection", "/stamping", "/trace"]) revalidatePath(path);
+}
+
+export async function deleteMaterialLot(id: string) {
+  const lot = await prisma.materialLot.findUniqueOrThrow({
+    where: { id }, include: { _count: { select: { issues: true, returns: true, batches: true } } },
+  });
+  if (Object.values(lot._count).some((count) => count > 0)) throw new Error("该物料批次已有领退料或生产记录，不可删除");
+  await prisma.materialLot.delete({ where: { id } });
+  revalidatePath("/materials");
+  revalidatePath("/injection");
+  revalidatePath("/stamping");
+}
+
+export async function deleteStockInRecord(id: string) {
+  await prisma.stockInRecord.delete({ where: { id } });
+  for (const path of ["/materials", "/injection", "/stamping", "/report", "/trace"]) revalidatePath(path);
+}
+
+export async function updateStockInRecord(input: { id: string; qty: number; warehouse: string; inBy: string }) {
+  if (!Number.isInteger(input.qty) || input.qty <= 0) throw new Error("数量必须是正整数");
+  const record = await prisma.stockInRecord.findUniqueOrThrow({
+    where: { id: input.id }, include: { batch: { include: { stockIns: true } } },
+  });
+  const limit = record.type === "不良品隔离" ? record.batch.badQty : record.batch.goodQty;
+  const usedByOthers = record.batch.stockIns
+    .filter((item) => item.id !== record.id && (record.type === "不良品隔离" ? item.type === "不良品隔离" : item.type !== "不良品隔离"))
+    .reduce((sum, item) => sum + item.qty, 0);
+  if (usedByOthers + input.qty > limit) throw new Error(`修改后数量超过该批次可登记上限 ${limit}`);
+  await prisma.stockInRecord.update({
+    where: { id: input.id },
+    data: { qty: input.qty, warehouse: input.warehouse.trim(), inBy: input.inBy.trim() },
+  });
+  for (const path of ["/materials", "/injection", "/stamping", "/report", "/trace"]) revalidatePath(path);
+}

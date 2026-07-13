@@ -24,11 +24,18 @@ export async function getReportFormOptions(type: "注塑" | "冲压") {
   return { workOrders, equipments, molds, materialLots, defectReasons };
 }
 
-export async function getRecentBatches(type: "注塑" | "冲压", take = 8) {
+export async function getProductionBatches(type: "注塑" | "冲压") {
   return prisma.productionBatch.findMany({
     where: { type },
-    include: { workOrder: true, sku: true, equipment: true, mold: true },
+    include: {
+      workOrder: true,
+      sku: true,
+      equipment: true,
+      mold: true,
+      materialLot: { include: { material: true } },
+      defects: { include: { reason: true } },
+      stockIns: true,
+    },
     orderBy: { startTime: "desc" },
-    take,
   });
 }

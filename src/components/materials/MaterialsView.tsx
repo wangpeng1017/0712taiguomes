@@ -6,7 +6,7 @@ import { PlusOutlined, InboxOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { INSPECT_STATUS } from "@/lib/constants";
 import { StatusTag } from "@/components/StatusTag";
-import { receiveMaterialLot, createStockIn, createDefectIsolation } from "@/lib/actions/materials";
+import { receiveMaterialLot, createStockIn, createDefectIsolation, deleteMaterialLot, deleteStockInRecord, updateMaterialLot, updateStockInRecord } from "@/lib/actions/materials";
 
 type MaterialLot = {
   id: string; lotNo: string; supplierLot: string | null; qty: number; remainingQty: number; unit: string;
@@ -40,10 +40,14 @@ export function MaterialsView({
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [stockInTarget, setStockInTarget] = useState<PendingBatch | null>(null);
   const [isolationTarget, setIsolationTarget] = useState<PendingBatch | null>(null);
+  const [lotEditor, setLotEditor] = useState<MaterialLot | null>(null);
+  const [stockRecordEditor, setStockRecordEditor] = useState<StockInRecord | null>(null);
   const [pending_, startTransition] = useTransition();
   const [receiveForm] = Form.useForm();
   const [stockInForm] = Form.useForm();
   const [isolationForm] = Form.useForm();
+  const [lotForm] = Form.useForm();
+  const [stockRecordForm] = Form.useForm();
 
   function submitReceive(values: { materialId: string; qty: number; supplierLot?: string; supplier?: string; warehouse?: string; inspectStatus: string }) {
     startTransition(async () => {
@@ -51,6 +55,44 @@ export function MaterialsView({
       message.success("原材料入库登记成功");
       setReceiveOpen(false);
       receiveForm.resetFields();
+    });
+  }
+
+  function submitLotEdit(values: { supplierLot?: string; supplier?: string; inspectStatus: string; stockStatus: string; warehouse?: string }) {
+    if (!lotEditor) return;
+    startTransition(async () => {
+      try {
+        await updateMaterialLot({ id: lotEditor.id, ...values });
+        message.success("物料批次已更新");
+        setLotEditor(null);
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : "更新失败");
+      }
+    });
+  }
+
+  function removeLot(id: string) {
+    startTransition(async () => {
+      try { await deleteMaterialLot(id); message.success("物料批次已删除"); }
+      catch (error) { message.error(error instanceof Error ? error.message : "删除失败"); }
+    });
+  }
+
+  function removeStockIn(id: string) {
+    startTransition(async () => {
+      try { await deleteStockInRecord(id); message.success("入库/隔离登记已撤销"); }
+      catch (error) { message.error(error instanceof Error ? error.message : "撤销失败"); }
+    });
+  }
+
+  function submitStockRecordEdit(values: { qty: number; warehouse: string; inBy: string }) {
+    if (!stockRecordEditor) return;
+    startTransition(async () => {
+      try {
+        await updateStockInRecord({ id: stockRecordEditor.id, ...values });
+        message.success("入库/隔离记录已更新");
+        setStockRecordEditor(null);
+      } catch (error) { message.error(error instanceof Error ? error.message : "更新失败"); }
     });
   }
 
@@ -103,6 +145,7 @@ export function MaterialsView({
           { title: "检验状态", dataIndex: "inspectStatus", render: (v) => <StatusTag status={v} /> },
           { title: "库存状态", dataIndex: "stockStatus", render: (v) => <StatusTag status={v} /> },
           { title: "仓库", dataIndex: "warehouse", render: (v) => v ?? "-" },
+          { title: "操作", render: (_, r) => <Space size="small"><Button type="link" size="small" onClick={() => { setLotEditor(r); queueMicrotask(() => lotForm.setFieldsValue(r)); }}>编辑</Button><Button type="link" size="small" danger onClick={() => Modal.confirm({ title: `删除物料批次 ${r.lotNo}`, content: "仅未被任何业务引用的批次可以删除。", okButtonProps: { danger: true }, onOk: () => removeLot(r.id) })}>删除</Button></Space> },
         ]}
       />
     </>
@@ -189,6 +232,7 @@ export function MaterialsView({
             { title: "仓库", dataIndex: "warehouse" },
             { title: "入库人", dataIndex: "inBy" },
             { title: "入库时间", render: (_, r) => dayjs(r.inAt).format("MM-DD HH:mm") },
+            { title: "操作", render: (_, r) => <Space size="small"><Button type="link" size="small" onClick={() => { setStockRecordEditor(r); queueMicrotask(() => stockRecordForm.setFieldsValue(r)); }}>编辑</Button><Button type="link" size="small" danger onClick={() => Modal.confirm({ title: `撤销记录 ${r.no}`, content: "撤销后对应数量将重新出现在待处理列表。", okButtonProps: { danger: true }, onOk: () => removeStockIn(r.id) })}>撤销</Button></Space> },
           ]}
         />
       </Card>
@@ -251,6 +295,26 @@ export function MaterialsView({
             </Form.Item>
           </Form>
         )}
+      </Modal>
+
+      <Modal title={lotEditor ? `编辑物料批次 · ${lotEditor.lotNo}` : ""} open={!!lotEditor} onCancel={() => setLotEditor(null)} onOk={() => lotForm.submit()} confirmLoading={pending_} destroyOnClose>
+        <Form form={lotForm} layout="vertical" onFinish={submitLotEdit} preserve={false}>
+          <Form.Item name="supplierLot" label="供应商批次号"><Input /></Form.Item>
+          <Form.Item name="supplier" label="供应商"><Input /></Form.Item>
+          <Space align="start" style={{ width: "100%" }}>
+            <Form.Item name="inspectStatus" label="检验状态" rules={[{ required: true }]}><Select style={{ width: 180 }} options={INSPECT_STATUS.map((s) => ({ value: s, label: s }))} /></Form.Item>
+            <Form.Item name="stockStatus" label="库存状态" rules={[{ required: true }]}><Select style={{ width: 180 }} options={["可用", "冻结", "隔离", "已消耗"].map((s) => ({ value: s, label: s }))} /></Form.Item>
+          </Space>
+          <Form.Item name="warehouse" label="仓库/库位"><Input /></Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal title={stockRecordEditor ? `编辑记录 · ${stockRecordEditor.no}` : ""} open={!!stockRecordEditor} onCancel={() => setStockRecordEditor(null)} onOk={() => stockRecordForm.submit()} confirmLoading={pending_} destroyOnClose>
+        <Form form={stockRecordForm} layout="vertical" onFinish={submitStockRecordEdit} preserve={false}>
+          <Form.Item name="qty" label="数量" rules={[{ required: true }]}><InputNumber min={1} precision={0} style={{ width: "100%" }} /></Form.Item>
+          <Form.Item name="warehouse" label="仓库/库位" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="inBy" label="登记人" rules={[{ required: true }]}><Input /></Form.Item>
+        </Form>
       </Modal>
 
       <Modal

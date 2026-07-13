@@ -38,6 +38,7 @@ export function ProductionReportForm({
   molds,
   materialLots,
   defectReasons,
+  onSuccess,
 }: {
   type: "注塑" | "冲压";
   workOrders: WorkOrder[];
@@ -45,6 +46,7 @@ export function ProductionReportForm({
   molds: Mold[];
   materialLots: MaterialLot[];
   defectReasons: DefectReason[];
+  onSuccess?: () => void;
 }) {
   const [form] = Form.useForm();
   const [pending, startTransition] = useTransition();
@@ -105,6 +107,7 @@ export function ProductionReportForm({
           defectPct: Math.round(dRate * 1000) / 10,
         });
         form.resetFields();
+        onSuccess?.();
         return;
       }
       if ("needOverLifeConfirm" in result && result.needOverLifeConfirm) {

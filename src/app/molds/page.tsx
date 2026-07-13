@@ -1,8 +1,8 @@
-import { getMoldsWithHistory } from "@/lib/queries/molds";
+import { getMoldFormOptions, getMoldsWithHistory } from "@/lib/queries/molds";
 import { MoldsView } from "@/components/molds/MoldsView";
 
 export default async function MoldsPage() {
-  const molds = await getMoldsWithHistory();
+  const [molds, options] = await Promise.all([getMoldsWithHistory(), getMoldFormOptions()]);
 
   return (
     <MoldsView
@@ -11,8 +11,9 @@ export default async function MoldsPage() {
         currentCount: m.currentCount, designLife: m.designLife, maintCycle: m.maintCycle, warnThreshold: m.warnThreshold,
         lastMaintDate: m.lastMaintDate ? m.lastMaintDate.toISOString() : null, lastMaintCount: m.lastMaintCount,
         cavityCount: m.cavityCount,
-        applicableSku: m.applicableSku ? { name: m.applicableSku.name, code: m.applicableSku.code } : null,
-        applicableEquipment: m.applicableEquipment ? { name: m.applicableEquipment.name, code: m.applicableEquipment.code } : null,
+        note: m.note,
+        applicableSku: m.applicableSku ? { id: m.applicableSku.id, name: m.applicableSku.name, code: m.applicableSku.code } : null,
+        applicableEquipment: m.applicableEquipment ? { id: m.applicableEquipment.id, name: m.applicableEquipment.name, code: m.applicableEquipment.code } : null,
         batches: m.batches.map((b) => ({
           id: b.id, batchNo: b.batchNo, startTime: b.startTime.toISOString(), goodQty: b.goodQty, badQty: b.badQty,
           workOrder: { no: b.workOrder.no }, sku: { name: b.sku.name },
@@ -23,6 +24,8 @@ export default async function MoldsPage() {
           content: mm.content, replacedParts: mm.replacedParts, result: mm.result, canContinue: mm.canContinue,
         })),
       }))}
+      skus={options.skus.map((s) => ({ id: s.id, code: s.code, name: s.name, type: s.type }))}
+      equipments={options.equipments.map((e) => ({ id: e.id, code: e.code, name: e.name, type: e.type }))}
     />
   );
 }

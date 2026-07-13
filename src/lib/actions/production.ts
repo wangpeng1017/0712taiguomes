@@ -192,3 +192,66 @@ export async function submitProductionBatch(input: SubmitBatchInput): Promise<Su
 
   return { ok: true, batchNo, moldLifeRatePct: Math.round(alertAfter.lifeRate * 1000) / 10, enteredMaintenance };
 }
+
+export async function voidProductionBatch(batchId: string, reason: string) {
+  if (!reason.trim()) throw new Error("请填写作废原因");
+  const batch = await prisma.productionBatch.findUniqueOrThrow({
+    where: { id: batchId },
+    include: { stockIns: true, mold: true, materialLot: true, workOrder: true },
+  });
+  if (batch.status === "已作废") throw new Error("该生产批次已经作废");
+  if (batch.stockIns.length > 0) throw new Error("该批次已有入库记录，请先撤销入库后再作废");
+
+  const issue = await prisma.materialIssue.findFirst({
+    where: { workOrderId: batch.workOrderId, materialLotId: batch.materialLotId, issuedAt: batch.startTime },
+  });
+  const materialReturn = batch.endTime
+    ? await prisma.materialReturn.findFirst({
+        where: { workOrderId: batch.workOrderId, materialLotId: batch.materialLotId, returnedAt: batch.endTime },
+      })
+    : null;
+  const restoredQty = (batch.issuedWeight ?? 0) - (batch.returnWeight ?? 0);
+  const newMoldCount = Math.max(batch.mold.currentCount - (batch.thisMoldCount ?? 0), 0);
+  const moldAlert = evaluateMoldAlert({ ...batch.mold, currentCount: newMoldCount });
+  const nextMoldStatus = MOLD_BLOCKED_STATUS.includes(batch.mold.status)
+    ? batch.mold.status
+    : moldAlert.dueForMaintenance ? "待保养" : "可用";
+
+  const remainingGood = await prisma.productionBatch.aggregate({
+    where: { workOrderId: batch.workOrderId, status: "已完工", id: { not: batch.id } },
+    _sum: { goodQty: true },
+    _count: true,
+  });
+  const nextWorkOrderStatus = batch.workOrder.status === "已关闭"
+    ? "已关闭"
+    : remainingGood._count === 0
+      ? "已下达"
+      : (remainingGood._sum.goodQty ?? 0) >= batch.workOrder.planQty
+        ? "已完工"
+        : "生产中";
+
+  await prisma.$transaction([
+    prisma.productionBatch.update({
+      where: { id: batch.id },
+      data: { status: "已作废", note: [batch.note, `作废原因：${reason.trim()}`].filter(Boolean).join("\n") },
+    }),
+    prisma.materialLot.update({
+      where: { id: batch.materialLotId },
+      data: {
+        remainingQty: { increment: restoredQty },
+        stockStatus: ["合格", "让步接收"].includes(batch.materialLot.inspectStatus) ? "可用" : "冻结",
+      },
+    }),
+    prisma.moldMaster.update({
+      where: { id: batch.moldId },
+      data: { currentCount: newMoldCount, status: nextMoldStatus },
+    }),
+    prisma.workOrder.update({ where: { id: batch.workOrderId }, data: { status: nextWorkOrderStatus } }),
+    ...(issue ? [prisma.materialIssue.delete({ where: { id: issue.id } })] : []),
+    ...(materialReturn ? [prisma.materialReturn.delete({ where: { id: materialReturn.id } })] : []),
+  ]);
+
+  for (const path of ["/injection", "/stamping", "/work-orders", "/materials", "/molds", "/trace", "/report", "/dashboard"]) {
+    revalidatePath(path);
+  }
+}

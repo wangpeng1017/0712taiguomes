@@ -7,7 +7,7 @@ export async function getWorkOrdersWithProgress() {
       sku: true,
       planEquipment: true,
       planMold: true,
-      batches: { select: { goodQty: true, badQty: true } },
+      batches: { where: { status: "已完工" }, select: { goodQty: true, badQty: true } },
     },
     orderBy: { createdAt: "desc" },
   });

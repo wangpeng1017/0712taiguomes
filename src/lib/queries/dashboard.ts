@@ -10,7 +10,7 @@ export async function getDashboardData() {
 
   const [batches, molds, pendingWorkOrders] = await Promise.all([
     prisma.productionBatch.findMany({
-      where: { startTime: { gte: rangeStart, lte: rangeEnd } },
+      where: { status: "已完工", startTime: { gte: rangeStart, lte: rangeEnd } },
       include: { defects: { include: { reason: true } }, sku: true, workOrder: true },
       orderBy: { startTime: "asc" },
     }),

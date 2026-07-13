@@ -89,8 +89,8 @@ docs/                        # PRD.md / SHIP-PROFILE.md / _INDEX.md
 |--------|------|--------------|------|
 | 仪表盘 | `dashboard` | 聚合 ProductionBatch/DefectRecord/MoldMaster | 只读，无独立表 |
 | 工单 | `work-orders` | WorkOrder | 状态机：未下达→已下达→生产中→暂停/已完工→已关闭 |
-| 注塑报工 | `injection` | ProductionBatch(type=注塑) | 开工+报工两段式表单 |
-| 冲压报工 | `stamping` | ProductionBatch(type=冲压) | 开工+报工两段式表单 |
+| 注塑报工 | `injection` | ProductionBatch(type=注塑) | 批次列表首页 + 抽屉新增报工 + 详情/作废 |
+| 冲压报工 | `stamping` | ProductionBatch(type=冲压) | 批次列表首页 + 抽屉新增报工 + 详情/作废 |
 | 物料批次 | `materials` | MaterialLot/MaterialIssue/MaterialReturn/StockInRecord | 4 个 tab |
 | 模具台账 | `molds` | MoldMaster/MoldMaintenanceRecord | 寿命进度条+保养表单 |
 | 批次追溯 | `trace` | 跨表查询，无独立表 | 3 个 tab：正向/反向/模具 |

@@ -18,7 +18,7 @@ import {
 import { PlusOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { StatusTag } from "@/components/StatusTag";
-import { createWorkOrder, setWorkOrderStatus } from "@/lib/actions/work-orders";
+import { createWorkOrder, deleteWorkOrder, setWorkOrderStatus, updateWorkOrder } from "@/lib/actions/work-orders";
 
 type Sku = { id: string; code: string; name: string; type: string };
 type Equipment = { id: string; code: string; name: string; type: string; status: string };
@@ -40,6 +40,8 @@ export type WorkOrderRow = {
   produced: number;
   completionRate: number;
   batchCount: number;
+  bomVersion: string | null;
+  route: string | null;
   note: string | null;
 };
 
@@ -58,6 +60,7 @@ export function WorkOrderTable({
   molds: Mold[];
 }) {
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<WorkOrderRow | null>(null);
   const [detail, setDetail] = useState<WorkOrderRow | null>(null);
   const [form] = Form.useForm();
   const [pending, startTransition] = useTransition();
@@ -84,7 +87,7 @@ export function WorkOrderTable({
   }) {
     startTransition(async () => {
       try {
-        await createWorkOrder({
+        const input = {
           skuId: values.skuId,
           planQty: values.planQty,
           planStart: values.planRange[0].toISOString(),
@@ -94,13 +97,39 @@ export function WorkOrderTable({
           bomVersion: values.bomVersion,
           route: values.route,
           note: values.note,
-        });
-        message.success("工单已创建（状态：未下达）");
+        };
+        if (editing) await updateWorkOrder(editing.id, input);
+        else await createWorkOrder(input);
+        message.success(editing ? "工单已更新" : "工单已创建（状态：未下达）");
         setCreateOpen(false);
+        setEditing(null);
         form.resetFields();
       } catch (error) {
         message.error(error instanceof Error ? error.message : "工单创建失败");
       }
+    });
+  }
+
+  function openEdit(row: WorkOrderRow) {
+    setEditing(row);
+    setCreateOpen(true);
+    queueMicrotask(() => form.setFieldsValue({
+      skuId: row.sku.id, planQty: row.planQty,
+      planRange: [dayjs(row.planStart), dayjs(row.planEnd)],
+      planEquipmentId: row.planEquipment?.id, planMoldId: row.planMold?.id,
+      bomVersion: row.bomVersion, route: row.route, note: row.note,
+    }));
+  }
+
+  function removeWorkOrder(row: WorkOrderRow) {
+    Modal.confirm({
+      title: `删除工单 ${row.no}`,
+      content: "只有未下达且没有任何业务记录的工单可以删除。",
+      okText: "确认删除", okButtonProps: { danger: true }, cancelText: "取消",
+      onOk: () => new Promise<void>((resolve, reject) => startTransition(async () => {
+        try { await deleteWorkOrder(row.id); message.success("工单已删除"); resolve(); }
+        catch (error) { message.error(error instanceof Error ? error.message : "删除失败"); reject(error); }
+      })),
     });
   }
 
@@ -118,7 +147,7 @@ export function WorkOrderTable({
   return (
     <>
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditing(null); form.resetFields(); setCreateOpen(true); }}>
           新建工单
         </Button>
       </div>
@@ -157,6 +186,7 @@ export function WorkOrderTable({
           { title: "状态", dataIndex: "status", render: (v) => <StatusTag status={v} /> },
           { title: "操作", render: (_, r) => (
               <Space size="small">
+                {!['已完工', '已关闭'].includes(r.status) && <Button size="small" type="link" onClick={() => openEdit(r)}>编辑</Button>}
                 {r.status === "未下达" && (
                   <Button size="small" type="link" onClick={() => changeStatus(r.id, "已下达", "下达")}>下达</Button>
                 )}
@@ -166,18 +196,22 @@ export function WorkOrderTable({
                 {r.status === "暂停" && (
                   <Button size="small" type="link" onClick={() => changeStatus(r.id, "生产中", "恢复")}>恢复</Button>
                 )}
+                {["生产中", "暂停"].includes(r.status) && r.goodQty >= r.planQty && (
+                  <Button size="small" type="link" onClick={() => changeStatus(r.id, "已完工", "完工")}>完工</Button>
+                )}
                 {["已下达", "生产中", "暂停", "已完工"].includes(r.status) && (
                   <Button size="small" type="link" danger onClick={() => changeStatus(r.id, "已关闭", "关闭")}>关闭</Button>
                 )}
+                {r.status === "未下达" && r.batchCount === 0 && <Button size="small" type="link" danger onClick={() => removeWorkOrder(r)}>删除</Button>}
               </Space>
             ) },
         ]}
       />
 
       <Modal
-        title="新建生产工单"
+        title={editing ? `编辑生产工单 · ${editing.no}` : "新建生产工单"}
         open={createOpen}
-        onCancel={() => setCreateOpen(false)}
+        onCancel={() => { setCreateOpen(false); setEditing(null); }}
         onOk={() => form.submit()}
         confirmLoading={pending}
         destroyOnHidden
