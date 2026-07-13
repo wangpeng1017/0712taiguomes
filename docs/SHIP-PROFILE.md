@@ -19,10 +19,29 @@
 - UI 改动验证方式: 人工冒烟清单（本项目暂无 Playwright E2E，Demo 阶段优先级 P2）
 
 ## 测试环境
-- 部署方式: 🔴 TODO — 王老师说"最终作为测试服务部署在阿里云上"，具体地址/服务器/部署方式待补
-- 地址: 🔴 TODO
-- 数据库: 🔴 TODO（本地开发用 SQLite 文件库；阿里云测试环境预期用 MySQL，部署前需把 `prisma/schema.prisma` 的 `datasource.provider` 由 `sqlite` 切回 `mysql`，并执行 `npx prisma migrate deploy` + `npx tsx prisma/seed.ts`）
+- 部署方式: 本地 `git archive` 生成发布包，SCP 到 `root@8.130.182.148` 后解压到 `/root/taiguo-mes`，执行 `scripts/deploy-test.sh`
+- 地址: `http://8.130.182.148/taiguo-mes/dashboard`
+- 应用: PM2 `taiguo-mes`，仅监听 `127.0.0.1:3004`；Nginx `/taiguo-mes` 反向代理
+- 数据库: MySQL `127.0.0.1:3308/taiguo_mes_test`，独立账号；schema 为 `prisma/mysql/schema.prisma`
+- 首次初始化: `npm run db:mysql:generate && npm run db:mysql:migrate && npm run db:seed`
+- 服务器限制: 无 Git、dnf、yum；禁止在服务器直接安装或猜测包管理器
 - 冒烟方式: 访问首页仪表盘 + 走一遍核心业务闭环（同上）
+
+### 发布命令
+
+```bash
+git archive --format=tar.gz --output=/tmp/taiguo-mes-release.tar.gz HEAD
+scp /tmp/taiguo-mes-release.tar.gz root@8.130.182.148:/tmp/
+ssh root@8.130.182.148 'mkdir -p /root/taiguo-mes && tar -xzf /tmp/taiguo-mes-release.tar.gz -C /root/taiguo-mes && cd /root/taiguo-mes && npm run deploy:test'
+```
+
+Nginx 配置位置：`/etc/nginx/conf.d/dingdan.conf`，修改前备份，修改后必须 `nginx -t && nginx -s reload`。
+
+### 安全边界
+
+- 2026-07-13 发现 root 级恶意程序并完成在线隔离，详见 `docs/SECURITY-INCIDENT-20260713.md`
+- SSH root 密钥已轮换为独立 Ed25519 密钥，密码登录关闭
+- 在线清理不能替代系统重装；该 ECS 应安排重建，当前 MES 仅作为隔离测试服务使用
 
 ## 生产环境
 - 🔴 一期为测试服务演示阶段，暂无生产环境规划

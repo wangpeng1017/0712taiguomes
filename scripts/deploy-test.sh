@@ -3,7 +3,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-git pull --ff-only origin main
+if command -v git >/dev/null 2>&1 && [ -d .git ]; then
+  git pull --ff-only origin main
+fi
 npm ci
 npm run db:mysql:generate
 npm run db:mysql:migrate

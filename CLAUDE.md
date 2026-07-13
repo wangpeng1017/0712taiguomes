@@ -17,11 +17,14 @@
 | ORM/DB | Prisma 6.19.x + MySQL | 未用 Prisma 7：把 `datasource.url` 移出 schema，破坏性变更踩过坑；本地开发用 SQLite 文件库零依赖，测试/生产用 MySQL |
 | 语言 | TypeScript 5 |
 
-## 部署（🔴 待补齐 — 首次部署前必须问王老师）
+## 部署
 
-- 测试环境：王老师说"最终作为测试服务部署在阿里云上"，但具体地址/SSH/数据库连接信息**尚未提供**，部署前必须先问
-- 数据库切换：本地 SQLite → 阿里云 MySQL 是**已知的一次性动作**，不是可选项。本项目状态字段全部用 `String`（非 Prisma `enum`），是特意为了让 SQLite/MySQL 切换不受阻——但仍需在目标环境重新 `prisma migrate deploy`
-- 部署命令/SOP：见 `docs/SHIP-PROFILE.md`（首次部署前需与王老师一起补全，当前为占位 TODO）
+- 测试环境：`http://8.130.182.148/taiguo-mes/dashboard`
+- 服务器目录：`/root/taiguo-mes`；PM2：`taiguo-mes`；应用仅监听 `127.0.0.1:3004`
+- 数据库：共享 MySQL 实例 `127.0.0.1:3308` 中的独立库 `taiguo_mes_test`，使用独立最小权限账号
+- 双数据库结构：本地继续使用 `prisma/schema.prisma`（SQLite）；测试环境使用 `prisma/mysql/schema.prisma` + 独立 MySQL migrations
+- 服务器没有 Git/系统包管理器，发版采用本地 `git archive` → SCP → 解压 → `scripts/deploy-test.sh`
+- 完整 SOP 与安全边界见 `docs/SHIP-PROFILE.md`
 
 ## 必读文件指针
 

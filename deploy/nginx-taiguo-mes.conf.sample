@@ -1,8 +1,12 @@
 location = /taiguo-mes {
-    return 301 /taiguo-mes/;
+    return 302 /taiguo-mes/dashboard;
 }
 
-location /taiguo-mes/ {
+location = /taiguo-mes/ {
+    return 302 /taiguo-mes/dashboard;
+}
+
+location ^~ /taiguo-mes/ {
     proxy_pass http://127.0.0.1:3004;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
