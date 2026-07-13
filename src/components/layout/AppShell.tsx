@@ -1,6 +1,6 @@
 "use client";
 
-import { Layout, Menu, Tag } from "antd";
+import { Layout, Menu, Segmented } from "antd";
 import {
   DashboardOutlined,
   FileTextOutlined,
@@ -14,7 +14,7 @@ import {
 } from "@ant-design/icons";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { TODAY } from "@/lib/constants";
+import { useLanguage } from "@/components/layout/LanguageProvider";
 
 const { Sider, Header, Content } = Layout;
 
@@ -36,6 +36,7 @@ const PAGE_TITLES: Record<string, string> = Object.fromEntries(
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { locale, setLocale } = useLanguage();
   const activeKey = NAV_ITEMS.find((item) => pathname?.startsWith(item.key))?.key ?? "/dashboard";
 
   return (
@@ -61,10 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               display: "inline-block",
             }}
           />
-          <div style={{ lineHeight: 1.2 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: 0.5 }}>轻量 MES</div>
-            <div style={{ fontSize: 11, color: "#8c98a4" }}>泰国工厂 · 一期 Demo</div>
-          </div>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>MES</div>
         </div>
         <Menu
           theme="dark"
@@ -92,8 +90,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {PAGE_TITLES[activeKey]}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <Tag>演示锚点日期 {TODAY}</Tag>
-            <Tag color="orange">中文</Tag>
+            <Segmented
+              size="small"
+              value={locale}
+              onChange={(value) => setLocale(value as "zh" | "en")}
+              options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]}
+            />
           </div>
         </Header>
         <Content style={{ padding: 24 }}>{children}</Content>
