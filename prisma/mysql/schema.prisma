@@ -1,0 +1,256 @@
+// 数据模型唯一权威。改字段前先读这份文件，禁止凭记忆猜字段名（见根 CLAUDE.md）。
+// 状态类字段统一用 String（非 Prisma enum），取值范围见 src/lib/constants.ts —— 这是为了让本地 SQLite 与部署目标 MySQL 之间切换 provider 不受阻。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ 主数据 ============
+
+model ProductSku {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  name           String
+  type           String // 注塑 / 冲压 / 线束预留
+  customerCode   String?
+  internalCode   String?
+  spec           String?
+  unit           String   @default("PCS")
+  stdWeight      Float? // 标准重量(g)
+  isSemiFinished Boolean  @default(false)
+  isFinished     Boolean  @default(true)
+  status         String   @default("启用") // 启用 / 停用
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  molds       MoldMaster[]
+  workOrders  WorkOrder[]
+  batches     ProductionBatch[]
+}
+
+model MaterialMaster {
+  id                 String  @id @default(cuid())
+  code               String  @unique
+  name               String
+  type               String // 塑料颗粒 / 金属卷材 / 辅料 / 其他
+  spec               String?
+  materialGrade      String? // 材质 / 材料牌号
+  supplier           String?
+  unit               String  @default("KG")
+  shelfLife          String?
+  status             String  @default("启用")
+  // 金属卷材专属
+  thickness          Float?
+  width              Float?
+  coilWeight         Float?
+  surfaceTreatment   String?
+  // 塑料颗粒专属
+  color              String?
+  dryingRequirement  String?
+
+  lots MaterialLot[]
+}
+
+model EquipmentMaster {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  type      String // 注塑机 / 冲床 / 其他
+  line      String?
+  status    String    @default("可用") // 可用 / 维修中 / 停用
+  capacity  String?
+  startDate DateTime?
+  note      String?
+
+  molds           MoldMaster[]
+  workOrders      WorkOrder[]
+  batches         ProductionBatch[]
+  materialIssues  MaterialIssue[]
+}
+
+model MoldMaster {
+  id                     String    @id @default(cuid())
+  code                   String    @unique
+  name                   String
+  type                   String // 注塑模 / 冲压模
+  applicableSkuId        String?
+  applicableSku          ProductSku? @relation(fields: [applicableSkuId], references: [id])
+  applicableEquipmentId  String?
+  applicableEquipment    EquipmentMaster? @relation(fields: [applicableEquipmentId], references: [id])
+  designLife             Int // 设计寿命（模次/冲次）
+  currentCount           Int       @default(0)
+  maintCycle             Int // 保养周期
+  warnThreshold          Float     @default(0.8) // 预警阈值比例
+  lastMaintDate          DateTime?
+  lastMaintCount         Int       @default(0)
+  status                 String    @default("可用") // 可用/生产中/待保养/维修中/停用/报废
+  cavityCount            Int? // 模穴数或单次出件数
+  note                   String?
+
+  workOrders  WorkOrder[]
+  batches     ProductionBatch[]
+  maintenance MoldMaintenanceRecord[]
+}
+
+model DefectReason {
+  id        String   @id @default(cuid())
+  reason    String
+  appliesTo String // 注塑 / 冲压 / 通用
+  status    String   @default("启用")
+
+  defects DefectRecord[]
+}
+
+// ============ 业务单据 ============
+
+model WorkOrder {
+  id                String   @id @default(cuid())
+  no                String   @unique
+  skuId             String
+  sku               ProductSku @relation(fields: [skuId], references: [id])
+  type              String // 注塑 / 冲压（冗余自 sku.type，便于过滤）
+  planQty           Int
+  planStart         DateTime
+  planEnd           DateTime
+  planEquipmentId   String?
+  planEquipment     EquipmentMaster? @relation(fields: [planEquipmentId], references: [id])
+  planMoldId        String?
+  planMold          MoldMaster? @relation(fields: [planMoldId], references: [id])
+  bomVersion        String?
+  route             String?
+  status            String   @default("未下达") // 未下达/已下达/生产中/暂停/已完工/已关闭
+  note              String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  batches        ProductionBatch[]
+  materialIssues MaterialIssue[]
+  materialReturns MaterialReturn[]
+}
+
+model MaterialLot {
+  id            String   @id @default(cuid())
+  lotNo         String   @unique
+  supplierLot   String?
+  materialId    String
+  material      MaterialMaster @relation(fields: [materialId], references: [id])
+  qty           Float // 入库数量
+  remainingQty  Float // 剩余可用数量
+  unit          String
+  inDate        DateTime
+  supplier      String?
+  inspectStatus String   @default("合格") // 待检/合格/不合格/让步接收
+  stockStatus   String   @default("可用") // 可用/冻结/隔离/已消耗
+  warehouse     String?
+
+  issues   MaterialIssue[]
+  returns  MaterialReturn[]
+  batches  ProductionBatch[]
+}
+
+model MaterialIssue {
+  id            String   @id @default(cuid())
+  workOrderId   String
+  workOrder     WorkOrder @relation(fields: [workOrderId], references: [id])
+  materialLotId String
+  materialLot   MaterialLot @relation(fields: [materialLotId], references: [id])
+  qty           Float
+  issuedBy      String
+  issuedAt      DateTime @default(now())
+  equipmentId   String?
+  equipment     EquipmentMaster? @relation(fields: [equipmentId], references: [id])
+  note          String?
+}
+
+model MaterialReturn {
+  id            String   @id @default(cuid())
+  workOrderId   String
+  workOrder     WorkOrder @relation(fields: [workOrderId], references: [id])
+  materialLotId String
+  materialLot   MaterialLot @relation(fields: [materialLotId], references: [id])
+  qty           Float
+  reason        String?
+  returnedAt    DateTime @default(now())
+  returnedBy    String
+}
+
+model ProductionBatch {
+  id                String   @id @default(cuid())
+  batchNo           String   @unique
+  workOrderId       String
+  workOrder         WorkOrder @relation(fields: [workOrderId], references: [id])
+  skuId             String
+  sku               ProductSku @relation(fields: [skuId], references: [id])
+  type              String // 注塑 / 冲压
+  equipmentId       String
+  equipment         EquipmentMaster @relation(fields: [equipmentId], references: [id])
+  moldId            String
+  mold              MoldMaster @relation(fields: [moldId], references: [id])
+  materialLotId     String
+  materialLot       MaterialLot @relation(fields: [materialLotId], references: [id])
+  shift             String // 白班 / 夜班
+  operator          String
+  startTime         DateTime
+  endTime           DateTime?
+  issuedWeight      Float? // 本批领用重量(kg)
+  goodQty           Int      @default(0)
+  badQty            Int      @default(0)
+  scrapWeight       Float? // 注塑:水口料/报废重量；冲压:边角料重量
+  returnWeight      Float? // 注塑:退料重量；冲压:剩余卷材重量
+  thisMoldCount     Int? // 本次模次/冲次
+  status            String   @default("进行中") // 进行中/已完工/已作废
+  confirmedByLeader Boolean  @default(false)
+  leaderConfirmedBy String?
+  leaderConfirmedAt DateTime?
+  note              String?
+  createdAt         DateTime @default(now())
+
+  defects  DefectRecord[]
+  stockIns StockInRecord[]
+}
+
+model DefectRecord {
+  id           String   @id @default(cuid())
+  batchId      String
+  batch        ProductionBatch @relation(fields: [batchId], references: [id])
+  qty          Int
+  reasonId     String
+  reason       DefectReason @relation(fields: [reasonId], references: [id])
+  responsible  String? // 原材料/设备/模具/工艺/操作/其他
+  action       String? // 返工/报废/隔离/让步接收
+  recordedBy   String
+  recordedAt   DateTime @default(now())
+  note         String?
+}
+
+model StockInRecord {
+  id        String   @id @default(cuid())
+  no        String   @unique
+  batchId   String
+  batch     ProductionBatch @relation(fields: [batchId], references: [id])
+  type      String // 半成品/成品/不良品隔离
+  qty       Int
+  warehouse String?
+  inBy      String
+  inAt      DateTime @default(now())
+}
+
+model MoldMaintenanceRecord {
+  id             String    @id @default(cuid())
+  moldId         String
+  mold           MoldMaster @relation(fields: [moldId], references: [id])
+  maintType      String // 周期保养/异常维修/换模保养/下模保养
+  startTime      DateTime
+  endTime        DateTime?
+  person         String
+  content        String?
+  replacedParts  String?
+  result         String?
+  canContinue    Boolean   @default(true)
+  note           String?
+}

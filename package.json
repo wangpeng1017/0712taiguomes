@@ -8,7 +8,10 @@
     "test": "tsx --test tests/*.test.ts",
     "start": "next start",
     "lint": "next lint",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:mysql:generate": "prisma generate --schema=prisma/mysql/schema.prisma",
+    "db:mysql:migrate": "prisma migrate deploy --schema=prisma/mysql/schema.prisma",
+    "deploy:test": "bash scripts/deploy-test.sh"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
