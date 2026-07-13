@@ -33,20 +33,24 @@ export function MoldsView({ molds }: { molds: Mold[] }) {
     if (!maintTarget) return;
     const now = new Date().toISOString();
     startTransition(async () => {
-      await registerMoldMaintenance({
-        moldId: maintTarget.id,
-        maintType: values.maintType,
-        startTime: now,
-        endTime: now,
-        person: values.person,
-        content: values.content,
-        replacedParts: values.replacedParts,
-        result: values.result,
-        canContinue: values.canContinue,
-      });
-      message.success(values.canContinue ? "保养登记完成，模具已恢复可用" : "保养/维修记录已登记");
-      setMaintTarget(null);
-      form.resetFields();
+      try {
+        await registerMoldMaintenance({
+          moldId: maintTarget.id,
+          maintType: values.maintType,
+          startTime: now,
+          endTime: now,
+          person: values.person,
+          content: values.content,
+          replacedParts: values.replacedParts,
+          result: values.result,
+          canContinue: values.canContinue,
+        });
+        message.success(values.canContinue ? "保养登记完成，模具已恢复可用" : "保养/维修记录已登记");
+        setMaintTarget(null);
+        form.resetFields();
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : "保养登记失败");
+      }
     });
   }
 

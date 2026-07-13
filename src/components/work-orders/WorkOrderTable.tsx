@@ -83,27 +83,35 @@ export function WorkOrderTable({
     note?: string;
   }) {
     startTransition(async () => {
-      await createWorkOrder({
-        skuId: values.skuId,
-        planQty: values.planQty,
-        planStart: values.planRange[0].toISOString(),
-        planEnd: values.planRange[1].toISOString(),
-        planEquipmentId: values.planEquipmentId,
-        planMoldId: values.planMoldId,
-        bomVersion: values.bomVersion,
-        route: values.route,
-        note: values.note,
-      });
-      message.success("工单已创建（状态：未下达）");
-      setCreateOpen(false);
-      form.resetFields();
+      try {
+        await createWorkOrder({
+          skuId: values.skuId,
+          planQty: values.planQty,
+          planStart: values.planRange[0].toISOString(),
+          planEnd: values.planRange[1].toISOString(),
+          planEquipmentId: values.planEquipmentId,
+          planMoldId: values.planMoldId,
+          bomVersion: values.bomVersion,
+          route: values.route,
+          note: values.note,
+        });
+        message.success("工单已创建（状态：未下达）");
+        setCreateOpen(false);
+        form.resetFields();
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : "工单创建失败");
+      }
     });
   }
 
   function changeStatus(id: string, status: string, label: string) {
     startTransition(async () => {
-      await setWorkOrderStatus(id, status);
-      message.success(`工单已${label}`);
+      try {
+        await setWorkOrderStatus(id, status);
+        message.success(`工单已${label}`);
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : "工单状态更新失败");
+      }
     });
   }
 

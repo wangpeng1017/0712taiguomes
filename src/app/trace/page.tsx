@@ -10,6 +10,8 @@ export default async function TracePage() {
         id: b.id, batchNo: b.batchNo, shift: b.shift, operator: b.operator,
         startTime: b.startTime.toISOString(), endTime: b.endTime ? b.endTime.toISOString() : null,
         goodQty: b.goodQty, badQty: b.badQty, status: b.status, moldId: b.moldId, materialLotId: b.materialLotId,
+        confirmedByLeader: b.confirmedByLeader, leaderConfirmedBy: b.leaderConfirmedBy,
+        leaderConfirmedAt: b.leaderConfirmedAt?.toISOString() ?? null,
         workOrder: { no: b.workOrder.no }, sku: { name: b.sku.name, code: b.sku.code },
         equipment: { code: b.equipment.code, name: b.equipment.name }, mold: { code: b.mold.code, name: b.mold.name },
         materialLot: { lotNo: b.materialLot.lotNo, material: { name: b.materialLot.material.name } },

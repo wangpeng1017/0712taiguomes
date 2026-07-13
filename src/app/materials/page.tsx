@@ -27,7 +27,8 @@ export default async function MaterialsPage() {
         workOrder: { no: r.workOrder.no }, materialLot: { lotNo: r.materialLot.lotNo, material: { name: r.materialLot.material.name } },
       }))}
       pending={stockInData.pending.map((b) => ({
-        id: b.id, batchNo: b.batchNo, goodQty: b.goodQty, startTime: b.startTime.toISOString(),
+        id: b.id, batchNo: b.batchNo, goodQty: b.goodQty, badQty: b.badQty,
+        remainingGoodQty: b.remainingGoodQty, remainingBadQty: b.remainingBadQty, startTime: b.startTime.toISOString(),
         sku: { name: b.sku.name, isFinished: b.sku.isFinished }, workOrder: { no: b.workOrder.no },
       }))}
       stockIns={stockInData.stockIns.map((s) => ({

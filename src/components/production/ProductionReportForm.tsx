@@ -8,6 +8,7 @@ import {
   Col,
   Descriptions,
   Form,
+  Input,
   InputNumber,
   Modal,
   Row,
@@ -93,6 +94,7 @@ export function ProductionReportForm({
         returnWeight: values.returnWeight ?? 0,
         defects,
         confirmOverLife,
+        leaderConfirmedBy: confirmOverLife ? form.getFieldValue("leaderConfirmedBy") : undefined,
       });
 
       if (result.ok) {
@@ -106,12 +108,25 @@ export function ProductionReportForm({
         return;
       }
       if ("needOverLifeConfirm" in result && result.needOverLifeConfirm) {
+        let confirmedBy = "";
         Modal.confirm({
           title: "模具已超过设计寿命",
-          content: `该模具寿命使用率已达 ${result.lifeRatePct}%，超过 100% 设计寿命，需主管确认后才能继续生产。是否确认继续开工？`,
+          content: (
+            <Space direction="vertical" style={{ width: "100%" }}>
+              <span>该模具寿命使用率已达 {result.lifeRatePct}%，需主管确认后才能继续生产。</span>
+              <Input placeholder="输入主管姓名" onChange={(event) => { confirmedBy = event.target.value; }} />
+            </Space>
+          ),
           okText: "主管已确认，继续",
           cancelText: "取消",
-          onOk: () => doSubmit(true),
+          onOk: () => {
+            if (!confirmedBy.trim()) {
+              message.error("请输入主管姓名");
+              return Promise.reject();
+            }
+            form.setFieldValue("leaderConfirmedBy", confirmedBy.trim());
+            doSubmit(true);
+          },
         });
         return;
       }

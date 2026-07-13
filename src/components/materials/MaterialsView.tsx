@@ -6,7 +6,7 @@ import { PlusOutlined, InboxOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { INSPECT_STATUS } from "@/lib/constants";
 import { StatusTag } from "@/components/StatusTag";
-import { receiveMaterialLot, createStockIn } from "@/lib/actions/materials";
+import { receiveMaterialLot, createStockIn, createDefectIsolation } from "@/lib/actions/materials";
 
 type MaterialLot = {
   id: string; lotNo: string; supplierLot: string | null; qty: number; remainingQty: number; unit: string;
@@ -22,7 +22,7 @@ type MaterialReturn = {
   workOrder: { no: string }; materialLot: { lotNo: string; material: { name: string } };
 };
 type PendingBatch = {
-  id: string; batchNo: string; goodQty: number; startTime: string;
+  id: string; batchNo: string; goodQty: number; badQty: number; remainingGoodQty: number; remainingBadQty: number; startTime: string;
   sku: { name: string; isFinished: boolean }; workOrder: { no: string };
 };
 type StockInRecord = {
@@ -39,9 +39,11 @@ export function MaterialsView({
 }) {
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [stockInTarget, setStockInTarget] = useState<PendingBatch | null>(null);
+  const [isolationTarget, setIsolationTarget] = useState<PendingBatch | null>(null);
   const [pending_, startTransition] = useTransition();
   const [receiveForm] = Form.useForm();
   const [stockInForm] = Form.useForm();
+  const [isolationForm] = Form.useForm();
 
   function submitReceive(values: { materialId: string; qty: number; supplierLot?: string; supplier?: string; warehouse?: string; inspectStatus: string }) {
     startTransition(async () => {
@@ -49,6 +51,20 @@ export function MaterialsView({
       message.success("原材料入库登记成功");
       setReceiveOpen(false);
       receiveForm.resetFields();
+    });
+  }
+
+  function submitIsolation(values: { qty: number; warehouse: string; inBy: string }) {
+    if (!isolationTarget) return;
+    startTransition(async () => {
+      try {
+        await createDefectIsolation({ batchId: isolationTarget.id, qty: values.qty, warehouse: values.warehouse, inBy: values.inBy });
+        message.success("不良品隔离登记成功");
+        setIsolationTarget(null);
+        isolationForm.resetFields();
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : "隔离登记失败");
+      }
     });
   }
 
@@ -146,12 +162,14 @@ export function MaterialsView({
             { title: "工单", render: (_, r) => r.workOrder.no },
             { title: "产品", render: (_, r) => r.sku.name },
             { title: "类型", render: (_, r) => (r.sku.isFinished ? <Tag color="green">成品</Tag> : <Tag color="blue">半成品</Tag>) },
-            { title: "良品数量", dataIndex: "goodQty", className: "tabular-nums" },
+            { title: "待入库良品", dataIndex: "remainingGoodQty", className: "tabular-nums" },
+            { title: "待隔离不良", dataIndex: "remainingBadQty", className: "tabular-nums" },
             { title: "报工时间", render: (_, r) => dayjs(r.startTime).format("MM-DD HH:mm") },
             { title: "操作", render: (_, r) => (
-                <Button size="small" type="link" onClick={() => setStockInTarget(r)}>
-                  登记入库
-                </Button>
+                <Space size="small">
+                  {r.remainingGoodQty > 0 && <Button size="small" type="link" onClick={() => setStockInTarget(r)}>良品入库</Button>}
+                  {r.remainingBadQty > 0 && <Button size="small" type="link" danger onClick={() => setIsolationTarget(r)}>不良隔离</Button>}
+                </Space>
               ) },
           ]}
         />
@@ -195,7 +213,7 @@ export function MaterialsView({
             <Select options={materials.map((m) => ({ value: m.id, label: `${m.name}（${m.code}）` }))} showSearch optionFilterProp="label" />
           </Form.Item>
           <Form.Item name="qty" label="入库数量 (kg)" rules={[{ required: true, message: "请输入入库数量" }]}>
-            <InputNumber min={0} style={{ width: "100%" }} />
+            <InputNumber min={0.01} style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item name="supplierLot" label="供应商批次号">
             <Input />
@@ -221,9 +239,9 @@ export function MaterialsView({
         destroyOnHidden
       >
         {stockInTarget && (
-          <Form form={stockInForm} layout="vertical" onFinish={submitStockIn} initialValues={{ qty: stockInTarget.goodQty, warehouse: stockInTarget.sku.isFinished ? "成品仓" : "半成品中转仓" }}>
-            <Form.Item name="qty" label={`入库数量（该批次良品 ${stockInTarget.goodQty}）`} rules={[{ required: true, message: "请输入入库数量" }]}>
-              <InputNumber min={1} max={stockInTarget.goodQty} style={{ width: "100%" }} />
+          <Form form={stockInForm} layout="vertical" onFinish={submitStockIn} initialValues={{ qty: stockInTarget.remainingGoodQty, warehouse: stockInTarget.sku.isFinished ? "成品仓" : "半成品中转仓" }}>
+            <Form.Item name="qty" label={`入库数量（剩余待入库 ${stockInTarget.remainingGoodQty}）`} rules={[{ required: true, message: "请输入入库数量" }]}>
+              <InputNumber min={1} max={stockInTarget.remainingGoodQty} style={{ width: "100%" }} />
             </Form.Item>
             <Form.Item name="warehouse" label="仓库/库位" rules={[{ required: true }]}>
               <Input />
@@ -231,6 +249,25 @@ export function MaterialsView({
             <Form.Item name="inBy" label="入库人" rules={[{ required: true, message: "请输入入库人" }]} initialValue="Thanawat">
               <Input />
             </Form.Item>
+          </Form>
+        )}
+      </Modal>
+
+      <Modal
+        title={isolationTarget ? `不良品隔离 · ${isolationTarget.batchNo}` : ""}
+        open={!!isolationTarget}
+        onCancel={() => setIsolationTarget(null)}
+        onOk={() => isolationForm.submit()}
+        confirmLoading={pending_}
+        destroyOnHidden
+      >
+        {isolationTarget && (
+          <Form form={isolationForm} layout="vertical" onFinish={submitIsolation} initialValues={{ qty: isolationTarget.remainingBadQty, warehouse: "不良品隔离区", inBy: "Thanawat" }}>
+            <Form.Item name="qty" label={`隔离数量（剩余待隔离 ${isolationTarget.remainingBadQty}）`} rules={[{ required: true }]}>
+              <InputNumber min={1} max={isolationTarget.remainingBadQty} style={{ width: "100%" }} />
+            </Form.Item>
+            <Form.Item name="warehouse" label="隔离库位" rules={[{ required: true }]}><Input /></Form.Item>
+            <Form.Item name="inBy" label="登记人" rules={[{ required: true }]}><Input /></Form.Item>
           </Form>
         )}
       </Modal>

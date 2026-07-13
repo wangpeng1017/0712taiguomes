@@ -7,7 +7,7 @@ export async function getReportFormOptions(type: "注塑" | "冲压") {
 
   const [workOrders, equipments, molds, materialLots, defectReasons] = await Promise.all([
     prisma.workOrder.findMany({
-      where: { type, status: { in: ["已下达", "生产中", "暂停"] } },
+      where: { type, status: { in: ["已下达", "生产中"] } },
       include: { sku: true },
       orderBy: { no: "asc" },
     }),
@@ -18,7 +18,7 @@ export async function getReportFormOptions(type: "注塑" | "冲压") {
       include: { material: true },
       orderBy: { lotNo: "asc" },
     }),
-    prisma.defectReason.findMany({ where: { appliesTo: type }, orderBy: { reason: "asc" } }),
+    prisma.defectReason.findMany({ where: { appliesTo: { in: [type, "通用"] }, status: "启用" }, orderBy: { reason: "asc" } }),
   ]);
 
   return { workOrders, equipments, molds, materialLots, defectReasons };

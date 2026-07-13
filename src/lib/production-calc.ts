@@ -34,7 +34,7 @@ export function scrapRate(scrapWeight: number, consumptionWeight: number): numbe
 // 本次模次/冲次 = 总生产数量 / 单次出件数；单次出件数为空则 = 总生产数量（SPEC §6.5.4）
 export function thisMoldCount(total: number, cavityCount: number | null | undefined): number {
   if (!cavityCount || cavityCount <= 0) return total;
-  return Math.round(total / cavityCount);
+  return Math.ceil(total / cavityCount);
 }
 
 export function moldLifeRate(currentCount: number, designLife: number): number {

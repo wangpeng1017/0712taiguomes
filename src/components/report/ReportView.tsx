@@ -9,14 +9,14 @@ import { defectRate, totalQty } from "@/lib/production-calc";
 import { TODAY } from "@/lib/constants";
 
 type Defect = { qty: number; reason: { reason: string } };
-type StockIn = { qty: number };
+type StockIn = { qty: number; type: string };
 type Batch = {
   id: string; batchNo: string; shift: string; startTime: string; goodQty: number; badQty: number;
   issuedWeight: number | null; returnWeight: number | null; thisMoldCount: number | null;
   workOrder: { no: string; planQty: number };
   sku: { code: string; name: string };
   equipment: { code: string };
-  mold: { code: string; status: string };
+  mold: { code: string; status: string; currentCount: number };
   materialLot: { lotNo: string };
   defects: Defect[];
   stockIns: StockIn[];
@@ -59,7 +59,7 @@ export function ReportView({ batches }: { batches: Batch[] }) {
     const m = new Map<string, { produced: number; planQty: number }>();
     for (const b of batches) {
       const cur = m.get(b.workOrder.no) ?? { produced: 0, planQty: b.workOrder.planQty };
-      cur.produced += totalQty(b.goodQty, b.badQty);
+      cur.produced += b.goodQty;
       m.set(b.workOrder.no, cur);
     }
     return m;
@@ -76,7 +76,7 @@ export function ReportView({ batches }: { batches: Batch[] }) {
 
   const moldCumulative = useMemo(() => {
     const m = new Map<string, number>();
-    for (const b of batches) m.set(b.mold.code, (m.get(b.mold.code) ?? 0) + (b.thisMoldCount ?? 0));
+    for (const b of batches) m.set(b.mold.code, b.mold.currentCount);
     return m;
   }, [batches]);
 
@@ -86,9 +86,10 @@ export function ReportView({ batches }: { batches: Batch[] }) {
   );
 
   const summaryRows = useMemo(() => {
+    const scopedBatches = batches.filter((batch) => localDateLabel(new Date(batch.startTime)) === date);
     if (dim === "defectReason") {
       const m = new Map<string, { qty: number; batchSet: Set<string> }>();
-      for (const b of batches) {
+      for (const b of scopedBatches) {
         for (const d of b.defects) {
           const e = m.get(d.reason.reason) ?? { qty: 0, batchSet: new Set<string>() };
           e.qty += d.qty;
@@ -112,7 +113,7 @@ export function ReportView({ batches }: { batches: Batch[] }) {
     };
     const fn = keyOf[dim];
     const m = new Map<string, { good: number; bad: number; batches: number }>();
-    for (const b of batches) {
+    for (const b of scopedBatches) {
       const key = fn(b);
       const e = m.get(key) ?? { good: 0, bad: 0, batches: 0 };
       e.good += b.goodQty;
@@ -130,7 +131,7 @@ export function ReportView({ batches }: { batches: Batch[] }) {
         yieldPct: Math.round((1 - defectRate(v.bad, v.good + v.bad)) * 1000) / 10,
         batches: v.batches,
       }));
-  }, [batches, dim]);
+  }, [batches, date, dim]);
 
   function exportDetailCsv() {
     const headers = [
@@ -142,7 +143,7 @@ export function ReportView({ batches }: { batches: Batch[] }) {
       const total = totalQty(b.goodQty, b.badQty);
       const progress = workOrderProgress.get(b.workOrder.no);
       const consumption = (b.issuedWeight ?? 0) - (b.returnWeight ?? 0);
-      const stockInQty = b.stockIns.reduce((s, si) => s + si.qty, 0);
+      const stockInQty = b.stockIns.filter((record) => record.type !== "不良品隔离").reduce((s, si) => s + si.qty, 0);
       const reasons = [...new Set(b.defects.map((d) => d.reason.reason))].join("/");
       return [
         localDateLabel(new Date(b.startTime)), b.shift, b.workOrder.no, b.sku.code, b.sku.name, b.workOrder.planQty,
@@ -160,13 +161,13 @@ export function ReportView({ batches }: { batches: Batch[] }) {
   function exportSummaryCsv() {
     if (dim === "defectReason") {
       const rows = (summaryRows as { label: string; qty: number; batches: number }[]).map((r) => [r.label, r.qty, r.batches]);
-      downloadCsv(`summary-defect-reason.csv`, toCsv(["不良原因", "数量合计", "涉及批次数"], rows));
+      downloadCsv(`summary-${date}-defect-reason.csv`, toCsv(["不良原因", "数量合计", "涉及批次数"], rows));
       return;
     }
     const rows = (summaryRows as { label: string; good: number; bad: number; total: number; yieldPct: number; batches: number }[]).map((r) => [
       r.label, r.good, r.bad, r.total, r.yieldPct, r.batches,
     ]);
-    downloadCsv(`summary-${dim}.csv`, toCsv(["维度", "良品合计", "不良合计", "总产合计", "良率%", "批次数"], rows));
+    downloadCsv(`summary-${date}-${dim}.csv`, toCsv(["维度", "良品合计", "不良合计", "总产合计", "良率%", "批次数"], rows));
   }
 
   return (
@@ -202,7 +203,7 @@ export function ReportView({ batches }: { batches: Batch[] }) {
             { title: "设备/模具", render: (_, r) => `${r.equipment.code} / ${r.mold.code}` },
             { title: "原材料批次", render: (_, r) => r.materialLot.lotNo },
             { title: "领用/退料(kg)", render: (_, r) => `${r.issuedWeight ?? 0} / ${r.returnWeight ?? 0}` },
-            { title: "入库数量", render: (_, r) => r.stockIns.reduce((s, si) => s + si.qty, 0) },
+            { title: "入库数量", render: (_, r) => r.stockIns.filter((record) => record.type !== "不良品隔离").reduce((s, si) => s + si.qty, 0) },
             { title: "不良原因", render: (_, r) => {
                 const reasons = [...new Set(r.defects.map((d) => d.reason.reason))];
                 return reasons.length ? reasons.map((x) => <Tag key={x}>{x}</Tag>) : "-";
@@ -215,7 +216,7 @@ export function ReportView({ batches }: { batches: Batch[] }) {
 
       <Card
         size="small"
-        title="汇总报表"
+        title={`汇总报表（${date}）`}
         extra={
           <Space>
             <Select value={dim} onChange={setDim} style={{ width: 180 }} options={DIMENSIONS.map((d) => ({ value: d.key, label: d.label }))} />

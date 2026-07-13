@@ -205,6 +205,8 @@ model ProductionBatch {
   thisMoldCount     Int? // 本次模次/冲次
   status            String   @default("进行中") // 进行中/已完工/已作废
   confirmedByLeader Boolean  @default(false)
+  leaderConfirmedBy String?
+  leaderConfirmedAt DateTime?
   note              String?
   createdAt         DateTime @default(now())
 

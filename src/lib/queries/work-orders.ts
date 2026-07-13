@@ -21,7 +21,7 @@ export async function getWorkOrdersWithProgress() {
       goodQty,
       badQty,
       produced,
-      completionRate: wo.planQty > 0 ? produced / wo.planQty : 0,
+      completionRate: wo.planQty > 0 ? goodQty / wo.planQty : 0,
       batchCount: wo.batches.length,
     };
   });

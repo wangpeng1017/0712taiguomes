@@ -11,6 +11,14 @@ export const SHIFTS = ["白班", "夜班"] as const;
 export const shiftCode = (shift: string): "D" | "N" => (shift === "白班" ? "D" : "N");
 
 export const WORK_ORDER_STATUS = ["未下达", "已下达", "生产中", "暂停", "已完工", "已关闭"] as const;
+export const WORK_ORDER_TRANSITIONS: Record<string, readonly string[]> = {
+  未下达: ["已下达", "已关闭"],
+  已下达: ["已关闭"],
+  生产中: ["暂停", "已完工", "已关闭"],
+  暂停: ["生产中", "已完工", "已关闭"],
+  已完工: ["已关闭"],
+  已关闭: [],
+};
 export const EQUIPMENT_STATUS = ["可用", "维修中", "停用"] as const;
 export const MOLD_STATUS = ["可用", "生产中", "待保养", "维修中", "停用", "报废"] as const;
 export const MOLD_BLOCKED_STATUS: readonly string[] = ["维修中", "停用", "报废"];

@@ -11,6 +11,7 @@ type StockIn = { id: string; no: string; type: string; qty: number; warehouse: s
 type Batch = {
   id: string; batchNo: string; shift: string; operator: string; startTime: string; endTime: string | null;
   goodQty: number; badQty: number; status: string; moldId: string; materialLotId: string;
+  confirmedByLeader: boolean; leaderConfirmedBy: string | null; leaderConfirmedAt: string | null;
   workOrder: { no: string }; sku: { name: string; code: string }; equipment: { code: string; name: string };
   mold: { code: string; name: string }; materialLot: { lotNo: string; material: { name: string } };
   defects: Defect[]; stockIns: StockIn[];
@@ -53,7 +54,7 @@ export function TraceView({ batches, materialLots, molds }: { batches: Batch[]; 
             { title: "设备/模具", render: (_, r) => `${r.equipment.code} / ${r.mold.code}` },
             { title: "日期/班次", render: (_, r) => `${dayjs(r.startTime).format("MM-DD")} · ${r.shift}` },
             { title: "良品/不良", render: (_, r) => `${r.goodQty} / ${r.badQty}` },
-            { title: "入库数量", render: (_, r) => r.stockIns.reduce((s, si) => s + si.qty, 0) },
+            { title: "入库数量", render: (_, r) => r.stockIns.filter((record) => record.type !== "不良品隔离").reduce((s, si) => s + si.qty, 0) },
           ]}
         />
       ) : (
@@ -90,6 +91,11 @@ export function TraceView({ batches, materialLots, molds }: { batches: Batch[]; 
             </Descriptions.Item>
             <Descriptions.Item label="良品/不良数量">{reverseResult.goodQty} / {reverseResult.badQty}</Descriptions.Item>
             <Descriptions.Item label="状态"><StatusTag status={reverseResult.status} /></Descriptions.Item>
+            <Descriptions.Item label="超寿命主管确认" span={2}>
+              {reverseResult.confirmedByLeader
+                ? `${reverseResult.leaderConfirmedBy ?? "-"} · ${reverseResult.leaderConfirmedAt ? dayjs(reverseResult.leaderConfirmedAt).format("YYYY-MM-DD HH:mm") : "-"}`
+                : "未触发"}
+            </Descriptions.Item>
           </Descriptions>
 
           <Card size="small" title="不良记录">
