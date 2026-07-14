@@ -8,7 +8,7 @@ export async function getReportFormOptions(type: "注塑" | "冲压") {
   const [workOrders, equipments, molds, materialLots, defectReasons] = await Promise.all([
     prisma.workOrder.findMany({
       where: { type, status: { in: ["已下达", "生产中"] } },
-      include: { sku: true },
+      include: { sku: true, planEquipment: true, planMold: true },
       orderBy: { no: "asc" },
     }),
     prisma.equipmentMaster.findMany({ where: { type: equipType }, orderBy: { code: "asc" } }),

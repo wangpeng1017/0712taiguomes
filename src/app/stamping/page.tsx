@@ -9,6 +9,9 @@ export default async function StampingPage() {
         type="冲压"
         workOrders={options.workOrders.map((w) => ({
           id: w.id, no: w.no, planQty: w.planQty, status: w.status,
+          planStart: w.planStart.toISOString(), planEnd: w.planEnd.toISOString(), updatedAt: w.updatedAt.toISOString(),
+          planEquipment: w.planEquipment ? { id: w.planEquipment.id, code: w.planEquipment.code, name: w.planEquipment.name } : null,
+          planMold: w.planMold ? { id: w.planMold.id, code: w.planMold.code, name: w.planMold.name } : null,
           sku: { id: w.sku.id, code: w.sku.code, name: w.sku.name, stdWeight: w.sku.stdWeight },
         }))}
         equipments={options.equipments.map((e) => ({ id: e.id, code: e.code, name: e.name, status: e.status }))}

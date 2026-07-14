@@ -23,7 +23,18 @@ import { SHIFTS, DEFECT_RESPONSIBLE, DEFECT_ACTION, TODAY } from "@/lib/constant
 import { defectRate, materialUtilization, totalQty } from "@/lib/production-calc";
 import { submitProductionBatch } from "@/lib/actions/production";
 
-type WorkOrder = { id: string; no: string; planQty: number; status: string; sku: { id: string; code: string; name: string; stdWeight: number | null } };
+type WorkOrder = {
+  id: string;
+  no: string;
+  planQty: number;
+  planStart: string;
+  planEnd: string;
+  updatedAt: string;
+  status: string;
+  planEquipment: { id: string; code: string; name: string } | null;
+  planMold: { id: string; code: string; name: string } | null;
+  sku: { id: string; code: string; name: string; stdWeight: number | null };
+};
 type Equipment = { id: string; code: string; name: string; status: string };
 type Mold = { id: string; code: string; name: string; status: string; currentCount: number; designLife: number; warnThreshold: number; cavityCount: number | null };
 type MaterialLot = { id: string; lotNo: string; remainingQty: number; unit: string; material: { name: string } };
@@ -38,6 +49,7 @@ export function ProductionReportForm({
   molds,
   materialLots,
   defectReasons,
+  initialWorkOrderId,
   onSuccess,
 }: {
   type: "注塑" | "冲压";
@@ -46,6 +58,7 @@ export function ProductionReportForm({
   molds: Mold[];
   materialLots: MaterialLot[];
   defectReasons: DefectReason[];
+  initialWorkOrderId?: string;
   onSuccess?: () => void;
 }) {
   const [form] = Form.useForm();
@@ -60,6 +73,7 @@ export function ProductionReportForm({
   const returnWeight = Form.useWatch("returnWeight", form) ?? 0;
 
   const selectedWorkOrder = workOrders.find((w) => w.id === workOrderId);
+  const initialWorkOrder = workOrders.find((w) => w.id === initialWorkOrderId);
   const selectedMold = molds.find((m) => m.id === moldId);
   const moldLifeRate = selectedMold ? selectedMold.currentCount / selectedMold.designLife : 0;
 
@@ -159,7 +173,16 @@ export function ProductionReportForm({
             form={form}
             layout="vertical"
             onFinish={() => doSubmit(false)}
-            initialValues={{ shift: "白班", timeRange: [dayjs("08:00", "HH:mm"), dayjs("19:00", "HH:mm")], scrapWeight: 0, returnWeight: 0, badQty: 0 }}
+            initialValues={{
+              workOrderId: initialWorkOrderId,
+              equipmentId: initialWorkOrder?.planEquipment?.id,
+              moldId: initialWorkOrder?.planMold?.id,
+              shift: "白班",
+              timeRange: [dayjs("08:00", "HH:mm"), dayjs("19:00", "HH:mm")],
+              scrapWeight: 0,
+              returnWeight: 0,
+              badQty: 0,
+            }}
           >
             <Row gutter={12}>
               <Col span={24}>
@@ -169,6 +192,13 @@ export function ProductionReportForm({
                     options={workOrders.map((w) => ({ value: w.id, label: `${w.no} · ${w.sku.name}（${w.sku.code}） · 计划${w.planQty}` }))}
                     showSearch
                     optionFilterProp="label"
+                    onChange={(value) => {
+                      const nextWorkOrder = workOrders.find((workOrder) => workOrder.id === value);
+                      form.setFieldsValue({
+                        equipmentId: nextWorkOrder?.planEquipment?.id,
+                        moldId: nextWorkOrder?.planMold?.id,
+                      });
+                    }}
                   />
                 </Form.Item>
               </Col>

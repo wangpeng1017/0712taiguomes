@@ -2,13 +2,14 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { Button, Descriptions, Drawer, Input, Modal, Select, Space, Table, Tag, message } from "antd";
+import type { TableProps } from "antd";
 import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { ProductionReportForm } from "@/components/production/ProductionReportForm";
 import { StatusTag } from "@/components/StatusTag";
 import { voidProductionBatch } from "@/lib/actions/production";
 
-type FormProps = Omit<React.ComponentProps<typeof ProductionReportForm>, "onSuccess">;
+type FormProps = Omit<React.ComponentProps<typeof ProductionReportForm>, "onSuccess" | "initialWorkOrderId">;
 type Batch = {
   id: string; batchNo: string; status: string; shift: string; operator: string; startTime: string; endTime: string | null;
   goodQty: number; badQty: number; issuedWeight: number | null; returnWeight: number | null; scrapWeight: number | null;
@@ -17,19 +18,87 @@ type Batch = {
   mold: { code: string; name: string }; materialLot: { lotNo: string; material: { name: string } };
   defects: { id: string; qty: number; reason: string; action: string | null }[];
 };
+type WorkOrder = FormProps["workOrders"][number];
+type TableRow =
+  | { key: `batch:${string}`; kind: "batch"; status: string; batch: Batch }
+  | { key: `work-order:${string}`; kind: "workOrder"; status: "已下达"; workOrder: WorkOrder };
 
 export function ProductionBatchView(props: FormProps & { batches: Batch[] }) {
   const { batches, ...formProps } = props;
   const [createOpen, setCreateOpen] = useState(false);
+  const [initialWorkOrderId, setInitialWorkOrderId] = useState<string>();
   const [detail, setDetail] = useState<Batch | null>(null);
   const [keyword, setKeyword] = useState("");
   const [status, setStatus] = useState<string>();
   const [pending, startTransition] = useTransition();
 
-  const rows = useMemo(() => batches.filter((batch) => {
-    const text = `${batch.batchNo} ${batch.workOrder.no} ${batch.sku.name} ${batch.sku.code} ${batch.operator}`.toLowerCase();
-    return (!keyword || text.includes(keyword.toLowerCase())) && (!status || batch.status === status);
-  }), [batches, keyword, status]);
+  const rows = useMemo<TableRow[]>(() => {
+    const combinedRows: TableRow[] = [
+      ...batches.map((batch): TableRow => ({ key: `batch:${batch.id}`, kind: "batch", status: batch.status, batch })),
+      ...formProps.workOrders
+        .filter((workOrder) => workOrder.status === "已下达")
+        .map((workOrder): TableRow => ({ key: `work-order:${workOrder.id}`, kind: "workOrder", status: "已下达", workOrder })),
+    ].sort((left, right) => {
+      const leftTime = left.kind === "batch" ? left.batch.startTime : left.workOrder.updatedAt;
+      const rightTime = right.kind === "batch" ? right.batch.startTime : right.workOrder.updatedAt;
+      return dayjs(rightTime).valueOf() - dayjs(leftTime).valueOf();
+    });
+
+    const normalizedKeyword = keyword.trim().toLowerCase();
+    return combinedRows.filter((row) => {
+      const text = row.kind === "batch"
+        ? `${row.batch.batchNo} ${row.batch.workOrder.no} ${row.batch.sku.name} ${row.batch.sku.code} ${row.batch.operator} ${row.batch.equipment.code} ${row.batch.mold.code}`
+        : `${row.workOrder.no} ${row.workOrder.sku.name} ${row.workOrder.sku.code} ${row.workOrder.planEquipment?.code ?? ""} ${row.workOrder.planEquipment?.name ?? ""} ${row.workOrder.planMold?.code ?? ""} ${row.workOrder.planMold?.name ?? ""}`;
+      return (!normalizedKeyword || text.toLowerCase().includes(normalizedKeyword)) && (!status || row.status === status);
+    });
+  }, [batches, formProps.workOrders, keyword, status]);
+
+  const statusOptions = useMemo(
+    () => Array.from(new Set(["已下达", ...batches.map((batch) => batch.status)])).map((value) => ({ value, label: value })),
+    [batches]
+  );
+
+  const columns: TableProps<TableRow>["columns"] = [
+    {
+      title: "生产批次",
+      fixed: "left",
+      render: (_, row) => row.kind === "batch"
+        ? <a onClick={() => setDetail(row.batch)} style={{ fontFamily: "ui-monospace, monospace" }}>{row.batch.batchNo}</a>
+        : <span style={{ color: "#8c98a4" }}>待报工</span>,
+    },
+    { title: "工单", render: (_, row) => row.kind === "batch" ? row.batch.workOrder.no : row.workOrder.no },
+    {
+      title: "产品",
+      render: (_, row) => {
+        const sku = row.kind === "batch" ? row.batch.sku : row.workOrder.sku;
+        return <div><div>{sku.name}</div><div style={{ color: "#8c98a4", fontSize: 11 }}>{sku.code}</div></div>;
+      },
+    },
+    {
+      title: "设备 / 模具",
+      render: (_, row) => row.kind === "batch"
+        ? `${row.batch.equipment.code} / ${row.batch.mold.code}`
+        : `${row.workOrder.planEquipment?.code ?? "-"} / ${row.workOrder.planMold?.code ?? "-"}`,
+    },
+    {
+      title: "日期 / 班次",
+      render: (_, row) => row.kind === "batch"
+        ? `${dayjs(row.batch.startTime).format("YYYY-MM-DD")} · ${row.batch.shift}`
+        : `${dayjs(row.workOrder.planStart).format("YYYY-MM-DD")} ~ ${dayjs(row.workOrder.planEnd).format("YYYY-MM-DD")}`,
+    },
+    { title: "良品", className: "tabular-nums", render: (_, row) => row.kind === "batch" ? row.batch.goodQty : "-" },
+    { title: "不良", className: "tabular-nums", render: (_, row) => row.kind === "batch" ? row.batch.badQty : "-" },
+    { title: "入库", className: "tabular-nums", render: (_, row) => row.kind === "batch" ? row.batch.stockInQty : "-" },
+    { title: "操作员", render: (_, row) => row.kind === "batch" ? row.batch.operator : "-" },
+    { title: "状态", render: (_, row) => <StatusTag status={row.status} /> },
+    {
+      title: "操作",
+      fixed: "right",
+      render: (_, row) => row.kind === "workOrder"
+        ? <Button type="link" size="small" onClick={() => { setInitialWorkOrderId(row.workOrder.id); setCreateOpen(true); }}>新增报工</Button>
+        : <Space><Button type="link" size="small" onClick={() => setDetail(row.batch)}>详情</Button>{row.batch.status !== "已作废" && <Button danger type="link" size="small" disabled={row.batch.stockInQty > 0 || pending} onClick={() => confirmVoid(row.batch)}>作废</Button>}</Space>,
+    },
+  ];
 
   function confirmVoid(batch: Batch) {
     let reason = "";
@@ -64,35 +133,23 @@ export function ProductionBatchView(props: FormProps & { batches: Batch[] }) {
     <>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
         <Space wrap>
-          <Input prefix={<SearchOutlined />} allowClear placeholder="搜索批次号、工单、产品或操作员" value={keyword} onChange={(e) => setKeyword(e.target.value)} style={{ width: 320 }} />
-          <Select allowClear placeholder="全部状态" value={status} onChange={setStatus} style={{ width: 140 }} options={["已完工", "已作废"].map((value) => ({ value, label: value }))} />
+          <Input prefix={<SearchOutlined />} allowClear placeholder="搜索批次、工单、产品、设备或操作员" value={keyword} onChange={(e) => setKeyword(e.target.value)} style={{ width: 320 }} />
+          <Select allowClear placeholder="全部状态" value={status} onChange={setStatus} style={{ width: 140 }} options={statusOptions} />
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>新增报工</Button>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => { setInitialWorkOrderId(undefined); setCreateOpen(true); }}>新增报工</Button>
       </div>
 
-      <Table
-        rowKey="id"
+      <Table<TableRow>
+        rowKey="key"
         dataSource={rows}
         pagination={{ pageSize: 10, showSizeChanger: true }}
         scroll={{ x: 1200 }}
-        locale={{ emptyText: "暂无生产批次" }}
-        columns={[
-          { title: "生产批次", dataIndex: "batchNo", fixed: "left", render: (value, row) => <a onClick={() => setDetail(row)} style={{ fontFamily: "ui-monospace, monospace" }}>{value}</a> },
-          { title: "工单", render: (_, row) => row.workOrder.no },
-          { title: "产品", render: (_, row) => <div><div>{row.sku.name}</div><div style={{ color: "#8c98a4", fontSize: 11 }}>{row.sku.code}</div></div> },
-          { title: "设备 / 模具", render: (_, row) => `${row.equipment.code} / ${row.mold.code}` },
-          { title: "日期 / 班次", render: (_, row) => `${dayjs(row.startTime).format("YYYY-MM-DD")} · ${row.shift}` },
-          { title: "良品", dataIndex: "goodQty", className: "tabular-nums" },
-          { title: "不良", dataIndex: "badQty", className: "tabular-nums" },
-          { title: "入库", dataIndex: "stockInQty", className: "tabular-nums" },
-          { title: "操作员", dataIndex: "operator" },
-          { title: "状态", dataIndex: "status", render: (value) => <StatusTag status={value} /> },
-          { title: "操作", fixed: "right", render: (_, row) => <Space><Button type="link" size="small" onClick={() => setDetail(row)}>详情</Button>{row.status !== "已作废" && <Button danger type="link" size="small" disabled={row.stockInQty > 0 || pending} onClick={() => confirmVoid(row)}>作废</Button>}</Space> },
-        ]}
+        locale={{ emptyText: "暂无已下达工单或生产批次" }}
+        columns={columns}
       />
 
-      <Drawer title={`新增${formProps.type}报工`} open={createOpen} onClose={() => setCreateOpen(false)} width="min(1180px, 96vw)" destroyOnClose>
-        <ProductionReportForm {...formProps} onSuccess={() => setCreateOpen(false)} />
+      <Drawer title={`新增${formProps.type}报工`} open={createOpen} onClose={() => { setCreateOpen(false); setInitialWorkOrderId(undefined); }} width="min(1180px, 96vw)" destroyOnClose>
+        <ProductionReportForm {...formProps} initialWorkOrderId={initialWorkOrderId} onSuccess={() => { setCreateOpen(false); setInitialWorkOrderId(undefined); }} />
       </Drawer>
 
       <Drawer title={detail ? `生产批次详情 · ${detail.batchNo}` : ""} open={!!detail} onClose={() => setDetail(null)} width={620}>
