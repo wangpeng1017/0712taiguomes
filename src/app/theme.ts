@@ -17,12 +17,12 @@ export const themeConfig: ThemeConfig = {
   },
   components: {
     Layout: {
-      siderBg: "#1a232c",
+      siderBg: "#3b3f48",
       headerBg: "#ffffff",
       bodyBg: "#f2f4f6",
     },
     Menu: {
-      darkItemBg: "#1a232c",
+      darkItemBg: "#3b3f48",
       darkItemSelectedBg: "#2a3542",
       darkItemHoverBg: "#22303c",
       darkItemColor: "#c3ccd6",
