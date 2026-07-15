@@ -141,6 +141,46 @@ a {
   letter-spacing: 0.01em;
 }
 
+.mes-header-actions,
+.mes-current-user {
+  display: flex;
+  align-items: center;
+}
+
+.mes-header-actions {
+  gap: 16px;
+}
+
+.mes-current-user {
+  min-width: 126px;
+  gap: 9px;
+  padding-left: 16px;
+  border-left: 1px solid var(--mes-border);
+}
+
+.mes-current-user-avatar {
+  color: #fff !important;
+  background: var(--mes-slate) !important;
+}
+
+.mes-current-user-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.mes-current-user-name {
+  color: var(--mes-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.mes-current-user-role {
+  color: var(--mes-text-secondary);
+  font-size: 11px;
+}
+
 .mes-content {
   padding: 24px;
 }
@@ -214,6 +254,14 @@ a {
 
   .table-toolbar {
     flex-wrap: wrap;
+  }
+
+  .mes-current-user-copy {
+    display: none;
+  }
+
+  .mes-current-user {
+    min-width: auto;
   }
 }
 

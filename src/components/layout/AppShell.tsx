@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Layout, Menu, Segmented } from "antd";
+import { Avatar, Layout, Menu, Segmented } from "antd";
 import {
   BarChartOutlined,
   ControlOutlined,
@@ -12,6 +12,7 @@ import {
   SearchOutlined,
   SettingOutlined,
   ToolOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -237,7 +238,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Layout>
         <Header className="mes-header">
           <div className="mes-page-title">{pageTitle}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div className="mes-header-actions">
             <Segmented
               aria-label={text("界面语言")}
               size="small"
@@ -245,6 +246,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onChange={(value) => setLocale(value as "zh" | "en")}
               options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]}
             />
+            <div className="mes-current-user" aria-label={`${text("当前登录用户")}：Somchai`}>
+              <Avatar size={30} icon={<UserOutlined />} className="mes-current-user-avatar" />
+              <div className="mes-current-user-copy">
+                <span className="mes-current-user-name">Somchai</span>
+                <span className="mes-current-user-role">{text("系统管理员")}</span>
+              </div>
+            </div>
           </div>
         </Header>
         <Content className="mes-content">{children}</Content>
