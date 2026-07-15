@@ -1,5 +1,7 @@
 import type { ThemeConfig } from "antd";
 
+const MES_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
+
 // 工业控制台主题：石墨侧边栏 + 安全橙主操作 + Slate 中性色。
 // 红色仅用于错误和阻断状态，不用于操作按钮。
 export const themeConfig: ThemeConfig = {
@@ -23,6 +25,11 @@ export const themeConfig: ThemeConfig = {
     controlHeight: 34,
     controlHeightSM: 28,
     fontSize: 14,
+    fontSizeSM: 13,
+    fontSizeLG: 16,
+    fontFamily: MES_FONT_FAMILY,
+    fontFamilyCode: '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace',
+    lineHeight: 1.5,
     boxShadowSecondary: "0 10px 28px rgba(23, 32, 42, 0.10)",
     wireframe: false,
   },
@@ -46,6 +53,18 @@ export const themeConfig: ThemeConfig = {
       headerColor: "#334155",
       rowHoverBg: "#fff7ed",
       borderColor: "#e2e7ed",
+      cellFontSize: 14,
+      cellFontSizeMD: 14,
+      cellFontSizeSM: 14,
+      cellPaddingBlock: 10,
+      cellPaddingInline: 14,
+      cellPaddingBlockMD: 10,
+      cellPaddingInlineMD: 14,
+      cellPaddingBlockSM: 8,
+      cellPaddingInlineSM: 12,
+    },
+    Button: {
+      fontWeight: 500,
     },
     Card: {
       headerBg: "#ffffff",

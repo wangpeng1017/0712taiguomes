@@ -208,12 +208,12 @@ export function WorkOrderTable({
         pagination={{ pageSize: 10, showSizeChanger: true }}
         columns={[
           { title: "工单号", dataIndex: "no", render: (v, r) => (
-              <a onClick={() => setDetail(r)} style={{ fontFamily: "ui-monospace, monospace" }}>{v}</a>
+              <a className="mes-code" onClick={() => setDetail(r)}>{v}</a>
             ) },
           { title: "产品", render: (_, r) => (
               <div>
                 <div>{r.sku.name}</div>
-                <div style={{ fontSize: 11, color: "#8c98a4", fontFamily: "ui-monospace, monospace" }}>{r.sku.code}</div>
+                <div className="mes-code" style={{ fontSize: 12, color: "#8c98a4" }}>{r.sku.code}</div>
               </div>
             ) },
           { title: "类型", dataIndex: "type", width: 70 },
@@ -228,7 +228,7 @@ export function WorkOrderTable({
           { title: "进度", width: 160, render: (_, r) => (
               <div>
                 <Progress percent={Math.round(r.completionRate * 100)} size="small" status={r.completionRate >= 1 ? "success" : "active"} />
-                <div style={{ fontSize: 11, color: "#8c98a4" }} className="tabular-nums">
+                <div style={{ fontSize: 12, color: "#8c98a4" }} className="tabular-nums">
                   良{r.goodQty} / 不良{r.badQty} / 批次{r.batchCount}
                 </div>
               </div>

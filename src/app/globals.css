@@ -8,6 +8,8 @@
   --mes-slate: #52606d;
   --mes-slate-hover: #334155;
   --mes-slate-soft: #f1f5f9;
+  --mes-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mes-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
 html,
@@ -36,8 +38,9 @@ body {
 body {
   color: var(--mes-text);
   background: #f3f5f7;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family: var(--mes-font-sans);
+  font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -198,6 +201,60 @@ a {
 .ant-card,
 .ant-table-wrapper .ant-table-container {
   border-color: var(--mes-border);
+}
+
+.ant-btn,
+.ant-input,
+.ant-input-number,
+.ant-select,
+.ant-picker,
+.ant-segmented,
+.ant-table,
+.ant-form,
+.ant-modal,
+.ant-drawer {
+  font-family: var(--mes-font-sans);
+}
+
+.ant-btn,
+.ant-input,
+.ant-input-number,
+.ant-select-selection-item,
+.ant-picker-input > input {
+  font-size: 14px;
+}
+
+.ant-btn-sm {
+  font-size: 13px;
+}
+
+.ant-table {
+  font-size: 14px;
+}
+
+.ant-table-thead > tr > th {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.ant-table-tbody > tr > td {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.ant-table-small .ant-table-thead > tr > th,
+.ant-table-small .ant-table-tbody > tr > td {
+  font-size: 14px;
+}
+
+.mes-code {
+  font-family: var(--mes-font-mono);
+  font-size: 1em;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .ant-btn {

@@ -23,7 +23,7 @@ export function MoldAlertTable({ rows }: { rows: MoldAlertRow[] }) {
           render: (_, r) => (
             <div>
               <div>{r.mold.name}</div>
-              <div style={{ fontSize: 11, color: "#8c98a4" }}>{r.mold.code}</div>
+              <div className="mes-code" style={{ fontSize: 12, color: "#8c98a4" }}>{r.mold.code}</div>
             </div>
           ),
         },

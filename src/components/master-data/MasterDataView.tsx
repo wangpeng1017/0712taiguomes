@@ -136,7 +136,7 @@ export function MasterDataView({ skus, materials, equipments, defectReasons, sec
   );
 
   const createButton = (kind: Kind) => <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor(kind)}>新增{TITLE[kind]}</Button>;
-  const tableProps = { size: "small" as const, pagination: { defaultPageSize: 10, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 条` } };
+  const tableProps = { size: "middle" as const, pagination: { defaultPageSize: 10, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 条` } };
 
   return (
     <>
@@ -157,7 +157,7 @@ export function MasterDataView({ skus, materials, equipments, defectReasons, sec
                 <span style={{ marginLeft: "auto" }}>{createButton("sku")}</span>
               </div>
               <Table {...tableProps} rowKey="id" dataSource={filteredSkus} scroll={{ x: 1100 }} columns={[
-                { title: "SKU编码", dataIndex: "code", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
+                { title: "SKU编码", dataIndex: "code", render: (v) => <span className="mes-code">{v}</span> },
                 { title: "名称", dataIndex: "name" }, { title: "类型", dataIndex: "type" },
                 { title: "客户料号", dataIndex: "customerCode", render: (v) => v ?? "-" },
                 { title: "内部料号", dataIndex: "internalCode", render: (v) => v ?? "-" },
@@ -182,7 +182,7 @@ export function MasterDataView({ skus, materials, equipments, defectReasons, sec
                 <span style={{ marginLeft: "auto" }}>{createButton("material")}</span>
               </div>
               <Table {...tableProps} rowKey="id" dataSource={filteredMaterials} scroll={{ x: 1100 }} columns={[
-                { title: "物料编码", dataIndex: "code", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
+                { title: "物料编码", dataIndex: "code", render: (v) => <span className="mes-code">{v}</span> },
                 { title: "名称", dataIndex: "name" }, { title: "类型", dataIndex: "type" },
                 { title: "材质/牌号", dataIndex: "materialGrade", render: (v) => v ?? "-" },
                 { title: "供应商", dataIndex: "supplier", render: (v) => v ?? "-" }, { title: "单位", dataIndex: "unit" },
@@ -206,7 +206,7 @@ export function MasterDataView({ skus, materials, equipments, defectReasons, sec
                 <span style={{ marginLeft: "auto" }}>{createButton("equipment")}</span>
               </div>
               <Table {...tableProps} rowKey="id" dataSource={filteredEquipments} columns={[
-                { title: "设备编号", dataIndex: "code", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
+                { title: "设备编号", dataIndex: "code", render: (v) => <span className="mes-code">{v}</span> },
                 { title: "设备名称", dataIndex: "name" }, { title: "类型", dataIndex: "type" },
                 { title: "所属产线", dataIndex: "line", render: (v) => v ?? "-" }, { title: "产能参数", dataIndex: "capacity", render: (v) => v ?? "-" },
                 { title: "状态", dataIndex: "status", render: (v) => <StatusTag status={v} /> },

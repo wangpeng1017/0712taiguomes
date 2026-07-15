@@ -221,12 +221,12 @@ export function MaterialsView({
         </Button>
       </div>
       <Table
-        size="small"
+        size="middle"
         rowKey="id"
         dataSource={filteredLots}
         pagination={pagination}
         columns={[
-          { title: "物料批次号", dataIndex: "lotNo", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
+          { title: "物料批次号", dataIndex: "lotNo", render: (v) => <span className="mes-code">{v}</span> },
           { title: "物料", render: (_, r) => `${r.material.name}（${r.material.code}）` },
           { title: "供应商批次", dataIndex: "supplierLot", render: (v) => v ?? "-" },
           { title: "入库数量", render: (_, r) => <span className="tabular-nums">{r.qty} {r.unit}</span> },
@@ -249,14 +249,14 @@ export function MaterialsView({
         <DatePicker.RangePicker value={dateRange} onChange={setDateRange} allowClear placeholder={["领料开始日期", "领料结束日期"]} />
         <Button icon={<ReloadOutlined />} onClick={resetFilters}>重置</Button>
       </div>
-      <Table
-        size="small"
-        rowKey="id"
-        dataSource={filteredIssues}
+    <Table
+      size="middle"
+      rowKey="id"
+      dataSource={filteredIssues}
         pagination={pagination}
         columns={[
-          { title: "工单号", render: (_, r) => r.workOrder.no },
-          { title: "物料批次", render: (_, r) => r.materialLot.lotNo },
+        { title: "工单号", render: (_, r) => <span className="mes-code">{r.workOrder.no}</span> },
+        { title: "物料批次", render: (_, r) => <span className="mes-code">{r.materialLot.lotNo}</span> },
           { title: "物料", render: (_, r) => r.materialLot.material.name },
           { title: "领料数量", dataIndex: "qty", className: "tabular-nums" },
           { title: "领料人", dataIndex: "issuedBy" },
@@ -275,14 +275,14 @@ export function MaterialsView({
         <DatePicker.RangePicker value={dateRange} onChange={setDateRange} allowClear placeholder={["退料开始日期", "退料结束日期"]} />
         <Button icon={<ReloadOutlined />} onClick={resetFilters}>重置</Button>
       </div>
-      <Table
-        size="small"
-        rowKey="id"
-        dataSource={filteredReturns}
+    <Table
+      size="middle"
+      rowKey="id"
+      dataSource={filteredReturns}
         pagination={pagination}
         columns={[
-          { title: "工单号", render: (_, r) => r.workOrder.no },
-          { title: "物料批次", render: (_, r) => r.materialLot.lotNo },
+        { title: "工单号", render: (_, r) => <span className="mes-code">{r.workOrder.no}</span> },
+        { title: "物料批次", render: (_, r) => <span className="mes-code">{r.materialLot.lotNo}</span> },
           { title: "物料", render: (_, r) => r.materialLot.material.name },
           { title: "退料数量", dataIndex: "qty", className: "tabular-nums" },
           { title: "退料原因", dataIndex: "reason" },
@@ -317,8 +317,8 @@ export function MaterialsView({
           pagination={pagination}
           locale={{ emptyText: "暂无待入库批次" }}
           columns={[
-            { title: "批次号", dataIndex: "batchNo", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
-            { title: "工单", render: (_, r) => r.workOrder.no },
+            { title: "批次号", dataIndex: "batchNo", render: (v) => <span className="mes-code">{v}</span> },
+            { title: "工单", render: (_, r) => <span className="mes-code">{r.workOrder.no}</span> },
             { title: "产品", render: (_, r) => r.sku.name },
             { title: "类型", render: (_, r) => (r.sku.isFinished ? <Tag color="green">成品</Tag> : <Tag color="blue">半成品</Tag>) },
             { title: "待入库良品", dataIndex: "remainingGoodQty", className: "tabular-nums" },
@@ -340,9 +340,9 @@ export function MaterialsView({
           dataSource={filteredStockIns}
           pagination={pagination}
           columns={[
-            { title: "入库单号", dataIndex: "no" },
-            { title: "批次号", render: (_, r) => r.batch.batchNo },
-            { title: "工单", render: (_, r) => r.batch.workOrder.no },
+            { title: "入库单号", dataIndex: "no", render: (v) => <span className="mes-code">{v}</span> },
+            { title: "批次号", render: (_, r) => <span className="mes-code">{r.batch.batchNo}</span> },
+            { title: "工单", render: (_, r) => <span className="mes-code">{r.batch.workOrder.no}</span> },
             { title: "产品", render: (_, r) => r.batch.sku.name },
             { title: "类型", dataIndex: "type" },
             { title: "入库数量", dataIndex: "qty", className: "tabular-nums" },

@@ -178,7 +178,7 @@ export function MoldsView({ molds, skus, equipments }: { molds: Mold[]; skus: Sk
           { title: "模具", render: (_, r) => (
               <div>
                 <a onClick={() => setDetail(r)}>{r.name}</a>
-                <div style={{ fontSize: 11, color: "#8c98a4", fontFamily: "ui-monospace, monospace" }}>{r.code}</div>
+                <div className="mes-code" style={{ fontSize: 12, color: "#8c98a4" }}>{r.code}</div>
               </div>
             ) },
           { title: "类型", dataIndex: "type", width: 80 },
@@ -227,7 +227,7 @@ export function MoldsView({ molds, skus, equipments }: { molds: Mold[]; skus: Sk
                 dataSource={detail.batches}
                 locale={{ emptyText: "暂无记录" }}
                 columns={[
-                  { title: "批次号", dataIndex: "batchNo", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{v}</span> },
+                  { title: "批次号", dataIndex: "batchNo", render: (v) => <span className="mes-code" style={{ fontSize: 12 }}>{v}</span> },
                   { title: "工单", render: (_, r) => r.workOrder.no },
                   { title: "良/不良", render: (_, r) => `${r.goodQty} / ${r.badQty}` },
                   { title: "时间", render: (_, r) => dayjs(r.startTime).format("MM-DD HH:mm") },

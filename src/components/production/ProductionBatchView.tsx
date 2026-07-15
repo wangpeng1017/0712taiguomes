@@ -89,7 +89,7 @@ export function ProductionBatchView(props: FormProps & { batches: Batch[] }) {
       title: "生产批次",
       fixed: "left",
       render: (_, row) => row.kind === "batch"
-        ? <a onClick={() => setDetail(row.batch)} style={{ fontFamily: "ui-monospace, monospace" }}>{row.batch.batchNo}</a>
+        ? <a className="mes-code" onClick={() => setDetail(row.batch)}>{row.batch.batchNo}</a>
         : <span style={{ color: "#8c98a4" }}>待报工</span>,
     },
     { title: "工单", render: (_, row) => row.kind === "batch" ? row.batch.workOrder.no : row.workOrder.no },
@@ -97,7 +97,7 @@ export function ProductionBatchView(props: FormProps & { batches: Batch[] }) {
       title: "产品",
       render: (_, row) => {
         const sku = row.kind === "batch" ? row.batch.sku : row.workOrder.sku;
-        return <div><div>{sku.name}</div><div style={{ color: "#8c98a4", fontSize: 11 }}>{sku.code}</div></div>;
+        return <div><div>{sku.name}</div><div className="mes-code" style={{ color: "#8c98a4", fontSize: 12 }}>{sku.code}</div></div>;
       },
     },
     {

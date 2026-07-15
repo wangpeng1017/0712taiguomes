@@ -378,7 +378,7 @@ export function ProductionReportForm({
             <Card title="最近一次提交结果" size="small">
               <Descriptions column={1} size="small">
                 <Descriptions.Item label="生成批次号">
-                  <span style={{ fontFamily: "ui-monospace, monospace" }}>{lastResult.batchNo}</span>
+                  <span className="mes-code">{lastResult.batchNo}</span>
                 </Descriptions.Item>
                 <Descriptions.Item label="不良率">{lastResult.defectPct}%</Descriptions.Item>
                 <Descriptions.Item label="材料利用率">

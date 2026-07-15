@@ -49,7 +49,7 @@ export function TraceView({ batches, materialLots, molds, section = "forward" }:
           dataSource={forwardResults}
           locale={{ emptyText: "该物料批次尚未被任何生产批次使用" }}
           columns={[
-            { title: "生产批次", dataIndex: "batchNo", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
+            { title: "生产批次", dataIndex: "batchNo", render: (v) => <span className="mes-code">{v}</span> },
             { title: "工单", render: (_, r) => r.workOrder.no },
             { title: "产品", render: (_, r) => `${r.sku.name}（${r.sku.code}）` },
             { title: "设备/模具", render: (_, r) => `${r.equipment.code} / ${r.mold.code}` },
@@ -79,7 +79,7 @@ export function TraceView({ batches, materialLots, molds, section = "forward" }:
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <Descriptions bordered size="small" column={2} title="生产批次全链路">
             <Descriptions.Item label="生产批次号" span={2}>
-              <span style={{ fontFamily: "ui-monospace, monospace" }}>{reverseResult.batchNo}</span>
+              <span className="mes-code">{reverseResult.batchNo}</span>
             </Descriptions.Item>
             <Descriptions.Item label="工单">{reverseResult.workOrder.no}</Descriptions.Item>
             <Descriptions.Item label="产品">{reverseResult.sku.name}（{reverseResult.sku.code}）</Descriptions.Item>
@@ -166,7 +166,7 @@ export function TraceView({ batches, materialLots, molds, section = "forward" }:
               dataSource={moldBatches}
               locale={{ emptyText: "暂无生产记录" }}
               columns={[
-                { title: "批次号", dataIndex: "batchNo", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
+                { title: "批次号", dataIndex: "batchNo", render: (v) => <span className="mes-code">{v}</span> },
                 { title: "工单", render: (_, r) => r.workOrder.no },
                 { title: "产品", render: (_, r) => r.sku.name },
                 { title: "良/不良", render: (_, r) => `${r.goodQty} / ${r.badQty}` },
