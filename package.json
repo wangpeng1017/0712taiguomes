@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "test": "tsx --test tests/*.test.ts",
-    "start": "NODE_OPTIONS=--max-http-header-size=65536 next start",
+    "start": "NODE_OPTIONS=--max-http-header-size=131072 next start",
     "lint": "next lint",
     "db:seed": "tsx prisma/seed.ts",
     "db:mysql:generate": "prisma generate --schema=prisma/mysql/schema.prisma",
