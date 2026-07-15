@@ -92,21 +92,20 @@ a {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-}
-
-.mes-sidebar-main-menu {
-  min-height: 0;
-  flex: 1;
   overflow-x: hidden;
   overflow-y: auto;
   padding-block: 8px;
 }
 
+.mes-sidebar-main-menu {
+  flex: 0 0 auto;
+}
+
 .mes-sidebar-system-area {
   flex: 0 0 auto;
-  padding-block: 8px;
+  margin-top: 4px;
+  padding-top: 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.08);
 }
 
 .mes-sidebar-system-menu {
