@@ -2,8 +2,11 @@ export type AppLocale = "zh" | "en";
 
 const EN: Record<string, string> = {
   "MES 制造执行": "MES Manufacturing",
-  "仪表盘": "Dashboard", "生产工单": "Work Orders", "注塑报工": "Injection Reporting", "冲压报工": "Stamping Reporting",
+  "仪表盘": "Dashboard", "生产管理": "Production Management", "生产工单": "Work Orders", "注塑报工": "Injection Reporting", "冲压报工": "Stamping Reporting",
+  "物料管理": "Material Management", "模具管理": "Tooling Management", "质量与追溯": "Quality & Traceability", "生产报表": "Production Reports",
   "物料批次": "Material Lots", "模具台账": "Molds", "批次追溯": "Traceability", "生产日报": "Production Report", "基础数据": "Master Data",
+  "系统管理": "System Management", "人员管理": "Personnel Management", "权限管理": "Permission Management", "组织管理": "Organization Management",
+  "原材料正向追溯": "Forward Material Trace", "生产批次反向追溯": "Reverse Production Batch Trace", "界面语言": "Interface Language",
   "新增报工": "New Report", "待报工": "Pending Report", "待生成": "Pending", "生产批次": "Production Batch", "生产批次号": "Batch No.", "生产批次全链路": "Production Batch Trace",
   "新建生产工单": "New Work Order", "新增模具": "New Mold", "新增产品 SKU": "New Product SKU", "新增物料": "New Material",
   "新增设备": "New Equipment", "新增不良原因": "New Defect Reason", "编辑生产工单": "Edit Work Order", "编辑模具": "Edit Mold",

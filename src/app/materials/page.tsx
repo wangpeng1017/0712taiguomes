@@ -1,7 +1,10 @@
 import { getMaterialLots, getMaterialIssues, getMaterialReturns, getStockInData, getMaterialMasters } from "@/lib/queries/materials";
 import { MaterialsView } from "@/components/materials/MaterialsView";
+import { redirect } from "next/navigation";
 
-export default async function MaterialsPage() {
+export default async function MaterialsPage({ params }: { params?: { view?: string } }) {
+  if (!params?.view) redirect("/materials/lots");
+  const section = params?.view === "issues" || params?.view === "returns" || params?.view === "stock-in" ? params.view : "lots";
   const [lots, issues, returns, stockInData, materials] = await Promise.all([
     getMaterialLots(),
     getMaterialIssues(),
@@ -12,6 +15,7 @@ export default async function MaterialsPage() {
 
   return (
     <MaterialsView
+      section={section}
       lots={lots.map((l) => ({
         id: l.id, lotNo: l.lotNo, supplierLot: l.supplierLot, qty: l.qty, remainingQty: l.remainingQty, unit: l.unit,
         inDate: l.inDate.toISOString(), supplier: l.supplier, inspectStatus: l.inspectStatus, stockStatus: l.stockStatus, warehouse: l.warehouse,

@@ -15,7 +15,7 @@ import {
   Table,
   message,
 } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { StatusTag } from "@/components/StatusTag";
 import { createWorkOrder, deleteWorkOrder, setWorkOrderStatus, updateWorkOrder } from "@/lib/actions/work-orders";
@@ -62,6 +62,10 @@ export function WorkOrderTable({
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<WorkOrderRow | null>(null);
   const [detail, setDetail] = useState<WorkOrderRow | null>(null);
+  const [keyword, setKeyword] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>();
+  const [statusFilter, setStatusFilter] = useState<string>();
+  const [planRange, setPlanRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
   const [form] = Form.useForm();
   const [pending, startTransition] = useTransition();
   const selectedSkuId = Form.useWatch("skuId", form);
@@ -73,6 +77,36 @@ export function WorkOrderTable({
   const equipmentOptions = equipments.filter((e) => e.type === EQUIP_TYPE_FOR[selectedSkuType ?? ""]);
   const moldOptions = molds.filter(
     (m) => m.type === MOLD_TYPE_FOR[selectedSkuType ?? ""] && (!m.applicableSkuId || m.applicableSkuId === selectedSkuId)
+  );
+  const filteredRows = useMemo(() => {
+    const normalizedKeyword = keyword.trim().toLowerCase();
+    return rows.filter((row) => {
+      const searchableText = [
+        row.no,
+        row.sku.name,
+        row.sku.code,
+        row.planEquipment?.name,
+        row.planEquipment?.code,
+        row.planMold?.name,
+        row.planMold?.code,
+      ].filter(Boolean).join(" ").toLowerCase();
+      const matchesRange = !planRange
+        || (dayjs(row.planEnd).endOf("day").valueOf() >= planRange[0].startOf("day").valueOf()
+          && dayjs(row.planStart).startOf("day").valueOf() <= planRange[1].endOf("day").valueOf());
+      return (!normalizedKeyword || searchableText.includes(normalizedKeyword))
+        && (!typeFilter || row.type === typeFilter)
+        && (!statusFilter || row.status === statusFilter)
+        && matchesRange;
+    });
+  }, [keyword, planRange, rows, statusFilter, typeFilter]);
+
+  const typeOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.type))).map((value) => ({ value, label: value })),
+    [rows]
+  );
+  const statusOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.status))).map((value) => ({ value, label: value })),
+    [rows]
   );
 
   function submitCreate(values: {
@@ -146,7 +180,23 @@ export function WorkOrderTable({
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+      <div className="table-toolbar" style={{ flexWrap: "wrap" }}>
+        <Input
+          prefix={<SearchOutlined />}
+          allowClear
+          placeholder="搜索工单、产品、设备或模具"
+          value={keyword}
+          onChange={(event) => setKeyword(event.target.value)}
+          style={{ width: 300 }}
+        />
+        <Select allowClear placeholder="全部类型" value={typeFilter} onChange={setTypeFilter} options={typeOptions} style={{ width: 130 }} />
+        <Select allowClear placeholder="全部状态" value={statusFilter} onChange={setStatusFilter} options={statusOptions} style={{ width: 140 }} />
+        <DatePicker.RangePicker
+          value={planRange}
+          onChange={(value) => setPlanRange(value?.[0] && value[1] ? [value[0], value[1]] : null)}
+          placeholder={["计划开始", "计划结束"]}
+        />
+        <Button onClick={() => { setKeyword(""); setTypeFilter(undefined); setStatusFilter(undefined); setPlanRange(null); }}>重置</Button>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditing(null); form.resetFields(); setCreateOpen(true); }}>
           新建工单
         </Button>
@@ -154,8 +204,8 @@ export function WorkOrderTable({
 
       <Table
         rowKey="id"
-        dataSource={rows}
-        pagination={{ pageSize: 10 }}
+        dataSource={filteredRows}
+        pagination={{ pageSize: 10, showSizeChanger: true }}
         columns={[
           { title: "工单号", dataIndex: "no", render: (v, r) => (
               <a onClick={() => setDetail(r)} style={{ fontFamily: "ui-monospace, monospace" }}>{v}</a>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Button, Descriptions, Drawer, Input, Modal, Select, Space, Table, Tag, message } from "antd";
+import { Button, DatePicker, Descriptions, Drawer, Input, Modal, Select, Space, Table, Tag, message } from "antd";
 import type { TableProps } from "antd";
 import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -30,6 +30,9 @@ export function ProductionBatchView(props: FormProps & { batches: Batch[] }) {
   const [detail, setDetail] = useState<Batch | null>(null);
   const [keyword, setKeyword] = useState("");
   const [status, setStatus] = useState<string>();
+  const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
+  const [equipmentCode, setEquipmentCode] = useState<string>();
+  const [shift, setShift] = useState<string>();
   const [pending, startTransition] = useTransition();
 
   const rows = useMemo<TableRow[]>(() => {
@@ -49,12 +52,35 @@ export function ProductionBatchView(props: FormProps & { batches: Batch[] }) {
       const text = row.kind === "batch"
         ? `${row.batch.batchNo} ${row.batch.workOrder.no} ${row.batch.sku.name} ${row.batch.sku.code} ${row.batch.operator} ${row.batch.equipment.code} ${row.batch.mold.code}`
         : `${row.workOrder.no} ${row.workOrder.sku.name} ${row.workOrder.sku.code} ${row.workOrder.planEquipment?.code ?? ""} ${row.workOrder.planEquipment?.name ?? ""} ${row.workOrder.planMold?.code ?? ""} ${row.workOrder.planMold?.name ?? ""}`;
-      return (!normalizedKeyword || text.toLowerCase().includes(normalizedKeyword)) && (!status || row.status === status);
+      const rowEquipmentCode = row.kind === "batch" ? row.batch.equipment.code : row.workOrder.planEquipment?.code;
+      const matchesDate = !dateRange || (row.kind === "batch"
+        ? dayjs(row.batch.startTime).valueOf() >= dateRange[0].startOf("day").valueOf()
+          && dayjs(row.batch.startTime).valueOf() <= dateRange[1].endOf("day").valueOf()
+        : dayjs(row.workOrder.planEnd).endOf("day").valueOf() >= dateRange[0].startOf("day").valueOf()
+          && dayjs(row.workOrder.planStart).startOf("day").valueOf() <= dateRange[1].endOf("day").valueOf());
+      return (!normalizedKeyword || text.toLowerCase().includes(normalizedKeyword))
+        && (!status || row.status === status)
+        && (!equipmentCode || rowEquipmentCode === equipmentCode)
+        && (!shift || (row.kind === "batch" && row.batch.shift === shift))
+        && matchesDate;
     });
-  }, [batches, formProps.workOrders, keyword, status]);
+  }, [batches, dateRange, equipmentCode, formProps.workOrders, keyword, shift, status]);
 
   const statusOptions = useMemo(
     () => Array.from(new Set(["已下达", ...batches.map((batch) => batch.status)])).map((value) => ({ value, label: value })),
+    [batches]
+  );
+  const equipmentOptions = useMemo(
+    () => Array.from(new Map([
+      ...batches.map((batch) => [batch.equipment.code, `${batch.equipment.name}（${batch.equipment.code}）`] as const),
+      ...formProps.workOrders
+        .filter((workOrder) => workOrder.planEquipment)
+        .map((workOrder) => [workOrder.planEquipment!.code, `${workOrder.planEquipment!.name}（${workOrder.planEquipment!.code}）`] as const),
+    ])).map(([value, label]) => ({ value, label })),
+    [batches, formProps.workOrders]
+  );
+  const shiftOptions = useMemo(
+    () => Array.from(new Set(batches.map((batch) => batch.shift))).map((value) => ({ value, label: value })),
     [batches]
   );
 
@@ -131,11 +157,17 @@ export function ProductionBatchView(props: FormProps & { batches: Batch[] }) {
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
-        <Space wrap>
-          <Input prefix={<SearchOutlined />} allowClear placeholder="搜索批次、工单、产品、设备或操作员" value={keyword} onChange={(e) => setKeyword(e.target.value)} style={{ width: 320 }} />
-          <Select allowClear placeholder="全部状态" value={status} onChange={setStatus} style={{ width: 140 }} options={statusOptions} />
-        </Space>
+      <div className="table-toolbar" style={{ flexWrap: "wrap" }}>
+        <Input prefix={<SearchOutlined />} allowClear placeholder="搜索批次、工单、产品、设备或操作员" value={keyword} onChange={(e) => setKeyword(e.target.value)} style={{ width: 300 }} />
+        <Select allowClear showSearch optionFilterProp="label" placeholder="全部设备" value={equipmentCode} onChange={setEquipmentCode} style={{ width: 190 }} options={equipmentOptions} />
+        <Select allowClear placeholder="全部班次" value={shift} onChange={setShift} style={{ width: 120 }} options={shiftOptions} />
+        <Select allowClear placeholder="全部状态" value={status} onChange={setStatus} style={{ width: 140 }} options={statusOptions} />
+        <DatePicker.RangePicker
+          value={dateRange}
+          onChange={(value) => setDateRange(value?.[0] && value[1] ? [value[0], value[1]] : null)}
+          placeholder={["开始日期", "结束日期"]}
+        />
+        <Button onClick={() => { setKeyword(""); setEquipmentCode(undefined); setShift(undefined); setStatus(undefined); setDateRange(null); }}>重置</Button>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => { setInitialWorkOrderId(undefined); setCreateOpen(true); }}>新增报工</Button>
       </div>
 
@@ -148,7 +180,7 @@ export function ProductionBatchView(props: FormProps & { batches: Batch[] }) {
         columns={columns}
       />
 
-      <Drawer title={`新增${formProps.type}报工`} open={createOpen} onClose={() => { setCreateOpen(false); setInitialWorkOrderId(undefined); }} width="min(1180px, 96vw)" destroyOnClose>
+      <Drawer title={`新增${formProps.type}报工`} open={createOpen} onClose={() => { setCreateOpen(false); setInitialWorkOrderId(undefined); }} width="min(1180px, 96vw)" destroyOnHidden>
         <ProductionReportForm {...formProps} initialWorkOrderId={initialWorkOrderId} onSuccess={() => { setCreateOpen(false); setInitialWorkOrderId(undefined); }} />
       </Drawer>
 

@@ -47,7 +47,18 @@ a {
 }
 
 .mes-sider {
+  position: sticky !important;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow: hidden;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mes-sider .ant-layout-sider-children {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .mes-brand {
@@ -76,7 +87,34 @@ a {
   white-space: nowrap;
 }
 
-.mes-sidebar-menu .ant-menu-item {
+.mes-sidebar-navigation {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.mes-sidebar-main-menu {
+  min-height: 0;
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-block: 8px;
+}
+
+.mes-sidebar-system-area {
+  flex: 0 0 auto;
+  padding-block: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.mes-sidebar-system-menu {
+  background: transparent !important;
+}
+
+.mes-sidebar-menu .ant-menu-item,
+.mes-sidebar-menu .ant-menu-submenu-title {
   transition: color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
 }
 
@@ -102,6 +140,16 @@ a {
 
 .mes-content {
   padding: 24px;
+}
+
+.mes-notice {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  color: var(--mes-text-secondary);
+  background: var(--mes-slate-soft);
+  border: 1px solid var(--mes-border);
+  border-left: 3px solid var(--mes-accent);
+  border-radius: 4px;
 }
 
 .ant-card,

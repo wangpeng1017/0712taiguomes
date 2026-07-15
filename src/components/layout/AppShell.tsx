@@ -1,70 +1,245 @@
 "use client";
 
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Layout, Menu, Segmented } from "antd";
 import {
-  DashboardOutlined,
-  FileTextOutlined,
-  ExperimentOutlined,
-  ToolOutlined,
-  InboxOutlined,
-  ControlOutlined,
-  SearchOutlined,
   BarChartOutlined,
+  ControlOutlined,
+  DashboardOutlined,
   DatabaseOutlined,
+  ExperimentOutlined,
+  InboxOutlined,
+  SearchOutlined,
+  SettingOutlined,
+  ToolOutlined,
 } from "@ant-design/icons";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLanguage } from "@/components/layout/LanguageProvider";
+import { translateText } from "@/lib/i18n";
 
 const { Sider, Header, Content } = Layout;
 
-const NAV_ITEMS = [
+type NavigationLeaf = {
+  key: string;
+  label: string;
+  icon?: ReactNode;
+};
+
+type NavigationGroup = {
+  key: string;
+  label: string;
+  icon: ReactNode;
+  children: NavigationLeaf[];
+};
+
+type NavigationItem = NavigationLeaf | NavigationGroup;
+type NavigationSection = "main" | "system";
+
+type ActiveNavigation = {
+  section: NavigationSection;
+  selectedKey: string;
+  openKey?: string;
+  label: string;
+  parentLabel?: string;
+};
+
+const MAIN_NAV_ITEMS: NavigationItem[] = [
   { key: "/dashboard", label: "仪表盘", icon: <DashboardOutlined /> },
-  { key: "/work-orders", label: "生产工单", icon: <FileTextOutlined /> },
-  { key: "/injection", label: "注塑报工", icon: <ExperimentOutlined /> },
-  { key: "/stamping", label: "冲压报工", icon: <ToolOutlined /> },
-  { key: "/materials", label: "物料批次", icon: <InboxOutlined /> },
-  { key: "/molds", label: "模具台账", icon: <ControlOutlined /> },
-  { key: "/trace", label: "批次追溯", icon: <SearchOutlined /> },
-  { key: "/report", label: "生产日报", icon: <BarChartOutlined /> },
-  { key: "/master-data", label: "基础数据", icon: <DatabaseOutlined /> },
+  {
+    key: "/production",
+    label: "生产管理",
+    icon: <ToolOutlined />,
+    children: [
+      { key: "/work-orders", label: "生产工单" },
+      { key: "/injection", label: "注塑报工", icon: <ExperimentOutlined /> },
+      { key: "/stamping", label: "冲压报工", icon: <ToolOutlined /> },
+    ],
+  },
+  {
+    key: "/materials",
+    label: "物料管理",
+    icon: <InboxOutlined />,
+    children: [
+      { key: "/materials/lots", label: "物料批次" },
+      { key: "/materials/issues", label: "工单领料" },
+      { key: "/materials/returns", label: "退料" },
+      { key: "/materials/stock-in", label: "成品/半成品入库" },
+    ],
+  },
+  { key: "/molds", label: "模具管理", icon: <ControlOutlined /> },
+  {
+    key: "/trace",
+    label: "质量与追溯",
+    icon: <SearchOutlined />,
+    children: [
+      { key: "/trace/forward", label: "原材料正向追溯" },
+      { key: "/trace/reverse", label: "生产批次反向追溯" },
+      { key: "/trace/molds", label: "模具追溯" },
+    ],
+  },
+  { key: "/report", label: "生产报表", icon: <BarChartOutlined /> },
+  {
+    key: "/master-data",
+    label: "基础数据",
+    icon: <DatabaseOutlined />,
+    children: [
+      { key: "/master-data/products", label: "产品 SKU" },
+      { key: "/master-data/materials", label: "物料主数据" },
+      { key: "/master-data/equipment", label: "设备台账" },
+      { key: "/master-data/dictionaries", label: "班次 / 不良原因" },
+    ],
+  },
 ];
 
-const PAGE_TITLES: Record<string, string> = Object.fromEntries(
-  NAV_ITEMS.map((item) => [item.key, item.label])
-);
+const SYSTEM_NAV_ITEMS: NavigationItem[] = [
+  {
+    key: "/system",
+    label: "系统管理",
+    icon: <SettingOutlined />,
+    children: [
+      { key: "/system/personnel", label: "人员管理" },
+      { key: "/system/permissions", label: "权限管理" },
+      { key: "/system/organization", label: "组织管理" },
+    ],
+  },
+];
+
+function isNavigationGroup(item: NavigationItem): item is NavigationGroup {
+  return "children" in item;
+}
+
+function matchesPath(pathname: string, key: string) {
+  return pathname === key || pathname.startsWith(`${key}/`);
+}
+
+function findActiveNavigation(
+  pathname: string,
+  items: NavigationItem[],
+  section: NavigationSection
+): ActiveNavigation | undefined {
+  for (const item of items) {
+    if (isNavigationGroup(item)) {
+      const child = item.children.find((candidate) => matchesPath(pathname, candidate.key));
+      if (child) {
+        return {
+          section,
+          selectedKey: child.key,
+          openKey: item.key,
+          label: child.label,
+          parentLabel: item.label,
+        };
+      }
+
+      if (matchesPath(pathname, item.key)) {
+        return {
+          section,
+          selectedKey: item.key,
+          openKey: item.key,
+          label: item.label,
+        };
+      }
+    } else if (matchesPath(pathname, item.key)) {
+      return { section, selectedKey: item.key, label: item.label };
+    }
+  }
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/dashboard";
   const { locale, setLocale } = useLanguage();
-  const activeKey = NAV_ITEMS.find((item) => pathname?.startsWith(item.key))?.key ?? "/dashboard";
+  const activeNavigation = useMemo(
+    () =>
+      findActiveNavigation(pathname, SYSTEM_NAV_ITEMS, "system") ??
+      findActiveNavigation(pathname, MAIN_NAV_ITEMS, "main") ?? {
+        section: "main" as const,
+        selectedKey: "/dashboard",
+        label: "仪表盘",
+      },
+    [pathname]
+  );
+  const [mainOpenKeys, setMainOpenKeys] = useState<string[]>(
+    activeNavigation.section === "main" && activeNavigation.openKey ? [activeNavigation.openKey] : []
+  );
+  const [systemOpenKeys, setSystemOpenKeys] = useState<string[]>(
+    activeNavigation.section === "system" && activeNavigation.openKey ? [activeNavigation.openKey] : []
+  );
+
+  const text = (label: string) => (locale === "en" ? translateText(label) : label);
+
+  useEffect(() => {
+    setMainOpenKeys(
+      activeNavigation.section === "main" && activeNavigation.openKey ? [activeNavigation.openKey] : []
+    );
+    setSystemOpenKeys(
+      activeNavigation.section === "system" && activeNavigation.openKey ? [activeNavigation.openKey] : []
+    );
+  }, [pathname, activeNavigation.openKey, activeNavigation.section]);
+
+  const createMenuItems = (items: NavigationItem[]) =>
+    items.map((item) => {
+      if (isNavigationGroup(item)) {
+        return {
+          key: item.key,
+          icon: item.icon,
+          label: text(item.label),
+          children: item.children.map((child) => ({
+            key: child.key,
+            label: <Link href={child.key}>{text(child.label)}</Link>,
+          })),
+        };
+      }
+
+      return {
+        key: item.key,
+        icon: item.icon,
+        label: <Link href={item.key}>{text(item.label)}</Link>,
+      };
+    });
+
+  const pageTitle = activeNavigation.parentLabel
+    ? `${text(activeNavigation.parentLabel)} / ${text(activeNavigation.label)}`
+    : text(activeNavigation.label);
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
       <Sider width={220} theme="dark" className="mes-sider">
         <div className="mes-brand">
           <span className="mes-brand-mark" aria-hidden="true" />
-          <div className="mes-brand-name">{locale === "en" ? "MES Manufacturing" : "MES 制造执行"}</div>
+          <div className="mes-brand-name">{text("MES 制造执行")}</div>
         </div>
-        <Menu
-          className="mes-sidebar-menu"
-          theme="dark"
-          mode="inline"
-          selectedKeys={[activeKey]}
-          items={NAV_ITEMS.map((item) => ({
-            key: item.key,
-            icon: item.icon,
-            label: <Link href={item.key}>{item.label}</Link>,
-          }))}
-          style={{ borderInlineEnd: "none" }}
-        />
+        <div className="mes-sidebar-navigation">
+          <Menu
+            className="mes-sidebar-menu mes-sidebar-main-menu"
+            theme="dark"
+            mode="inline"
+            selectedKeys={activeNavigation.section === "main" ? [activeNavigation.selectedKey] : []}
+            openKeys={mainOpenKeys}
+            onOpenChange={setMainOpenKeys}
+            items={createMenuItems(MAIN_NAV_ITEMS)}
+            style={{ borderInlineEnd: "none" }}
+          />
+          <div className="mes-sidebar-system-area">
+            <Menu
+              className="mes-sidebar-menu mes-sidebar-system-menu"
+              aria-label={text("系统管理")}
+              theme="dark"
+              mode="inline"
+              selectedKeys={activeNavigation.section === "system" ? [activeNavigation.selectedKey] : []}
+              openKeys={systemOpenKeys}
+              onOpenChange={setSystemOpenKeys}
+              items={createMenuItems(SYSTEM_NAV_ITEMS)}
+              style={{ borderInlineEnd: "none" }}
+            />
+          </div>
+        </div>
       </Sider>
       <Layout>
         <Header className="mes-header">
-          <div className="mes-page-title">{PAGE_TITLES[activeKey]}</div>
+          <div className="mes-page-title">{pageTitle}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <Segmented
-              aria-label="界面语言"
+              aria-label={text("界面语言")}
               size="small"
               value={locale}
               onChange={(value) => setLocale(value as "zh" | "en")}

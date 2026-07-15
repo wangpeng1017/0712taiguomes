@@ -19,8 +19,9 @@ type Batch = {
 type MaterialLot = { id: string; lotNo: string; material: { name: string } };
 type Maintenance = { id: string; maintType: string; startTime: string; person: string; canContinue: boolean };
 type Mold = { id: string; code: string; name: string; currentCount: number; designLife: number; warnThreshold: number; maintenance: Maintenance[] };
+export type TraceSection = "forward" | "reverse" | "molds";
 
-export function TraceView({ batches, materialLots, molds }: { batches: Batch[]; materialLots: MaterialLot[]; molds: Mold[] }) {
+export function TraceView({ batches, materialLots, molds, section = "forward" }: { batches: Batch[]; materialLots: MaterialLot[]; molds: Mold[]; section?: TraceSection }) {
   const [lotId, setLotId] = useState<string | undefined>();
   const [batchId, setBatchId] = useState<string | undefined>();
   const [moldId, setMoldId] = useState<string | undefined>();
@@ -204,7 +205,8 @@ export function TraceView({ batches, materialLots, molds }: { batches: Batch[]; 
         message="小批次追溯：追溯粒度为「工单+日期+班次+SKU+设备+模具+原材料批次」组成的生产批次，不追溯到单件产品（见 SPEC §4）"
       />
       <Tabs
-        defaultActiveKey="forward"
+        activeKey={section === "molds" ? "mold" : section}
+        tabBarStyle={{ display: "none" }}
         items={[
           { key: "forward", label: "正向追溯（原材料→生产批次）", children: forwardTab },
           { key: "reverse", label: "反向追溯（生产批次→全链路）", children: reverseTab },

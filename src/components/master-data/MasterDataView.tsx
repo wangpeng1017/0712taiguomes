@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Button, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tabs, Tag, message } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import { StatusTag } from "@/components/StatusTag";
 import { EQUIPMENT_STATUS, EQUIPMENT_TYPES, MATERIAL_TYPES, PRODUCT_TYPES, SHIFTS } from "@/lib/constants";
 import { deleteMasterData, saveDefectReason, saveEquipmentMaster, saveMaterialMaster, saveProductSku } from "@/lib/actions/master-data";
@@ -19,15 +19,71 @@ type Material = {
 type Equipment = { id: string; code: string; name: string; type: string; line: string | null; status: string; capacity: string | null; note: string | null };
 type DefectReason = { id: string; reason: string; appliesTo: string; status: string };
 type Kind = "sku" | "material" | "equipment" | "defect";
+export type MasterDataSection = "products" | "materials" | "equipment" | "dictionaries";
 
 const TITLE: Record<Kind, string> = { sku: "产品 SKU", material: "物料", equipment: "设备", defect: "不良原因" };
 
-export function MasterDataView({ skus, materials, equipments, defectReasons }: {
+function matchesKeyword(keyword: string, values: Array<string | number | null | undefined>) {
+  const normalized = keyword.trim().toLowerCase();
+  return !normalized || values.some((value) => String(value ?? "").toLowerCase().includes(normalized));
+}
+
+function uniqueOptions(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))].map((value) => ({ value, label: value }));
+}
+
+export function MasterDataView({ skus, materials, equipments, defectReasons, section = "products" }: {
   skus: Sku[]; materials: Material[]; equipments: Equipment[]; defectReasons: DefectReason[];
+  section?: MasterDataSection;
 }) {
   const [form] = Form.useForm();
   const [editor, setEditor] = useState<{ kind: Kind; row?: Record<string, unknown> } | null>(null);
+  const [keyword, setKeyword] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>();
+  const [statusFilter, setStatusFilter] = useState<string>();
+  const [extraFilter, setExtraFilter] = useState<string>();
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setKeyword("");
+    setTypeFilter(undefined);
+    setStatusFilter(undefined);
+    setExtraFilter(undefined);
+  }, [section]);
+
+  const filteredSkus = useMemo(() => skus.filter((row) =>
+    matchesKeyword(keyword, [row.code, row.name, row.customerCode, row.internalCode, row.spec])
+    && (!typeFilter || row.type === typeFilter)
+    && (!statusFilter || row.status === statusFilter)
+    && (!extraFilter || (extraFilter === "成品" ? row.isFinished : row.isSemiFinished))
+  ), [skus, keyword, typeFilter, statusFilter, extraFilter]);
+
+  const filteredMaterials = useMemo(() => materials.filter((row) =>
+    matchesKeyword(keyword, [row.code, row.name, row.spec, row.materialGrade, row.supplier, row.color])
+    && (!typeFilter || row.type === typeFilter)
+    && (!statusFilter || row.status === statusFilter)
+    && (!extraFilter || row.supplier === extraFilter)
+  ), [materials, keyword, typeFilter, statusFilter, extraFilter]);
+
+  const filteredEquipments = useMemo(() => equipments.filter((row) =>
+    matchesKeyword(keyword, [row.code, row.name, row.line, row.capacity, row.note])
+    && (!typeFilter || row.type === typeFilter)
+    && (!statusFilter || row.status === statusFilter)
+    && (!extraFilter || row.line === extraFilter)
+  ), [equipments, keyword, typeFilter, statusFilter, extraFilter]);
+
+  const filteredDefectReasons = useMemo(() => defectReasons.filter((row) =>
+    matchesKeyword(keyword, [row.reason, row.appliesTo])
+    && (!typeFilter || row.appliesTo === typeFilter)
+    && (!statusFilter || row.status === statusFilter)
+  ), [defectReasons, keyword, typeFilter, statusFilter]);
+
+  function resetFilters() {
+    setKeyword("");
+    setTypeFilter(undefined);
+    setStatusFilter(undefined);
+    setExtraFilter(undefined);
+  }
 
   function openEditor(kind: Kind, row?: Record<string, unknown>) {
     form.resetFields();
@@ -80,53 +136,110 @@ export function MasterDataView({ skus, materials, equipments, defectReasons }: {
   );
 
   const createButton = (kind: Kind) => <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor(kind)}>新增{TITLE[kind]}</Button>;
-  const tableProps = { size: "small" as const, pagination: { pageSize: 10, showSizeChanger: true } };
+  const tableProps = { size: "small" as const, pagination: { defaultPageSize: 10, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 条` } };
 
   return (
     <>
       <Tabs
-        defaultActiveKey="sku"
+        activeKey={section === "products" ? "sku" : section === "materials" ? "material" : section === "equipment" ? "equipment" : "dict"}
+        tabBarStyle={{ display: "none" }}
         items={[
-          { key: "sku", label: "产品SKU", children: <><div className="table-toolbar">{createButton("sku")}</div><Table {...tableProps} rowKey="id" dataSource={skus} scroll={{ x: 1100 }} columns={[
-            { title: "SKU编码", dataIndex: "code", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
-            { title: "名称", dataIndex: "name" }, { title: "类型", dataIndex: "type" },
-            { title: "客户料号", dataIndex: "customerCode", render: (v) => v ?? "-" },
-            { title: "内部料号", dataIndex: "internalCode", render: (v) => v ?? "-" },
-            { title: "规格", dataIndex: "spec", render: (v) => v ?? "-" },
-            { title: "标准重量(g)", dataIndex: "stdWeight", render: (v) => v ?? "-" },
-            { title: "产品属性", render: (_, r) => <>{r.isSemiFinished && <Tag>半成品</Tag>}{r.isFinished && <Tag color="green">成品</Tag>}</> },
-            { title: "状态", dataIndex: "status", render: (v) => <StatusTag status={v} /> },
-            { title: "操作", fixed: "right", render: (_, r) => actions("sku", r as unknown as Record<string, unknown>) },
-          ]} /></> },
-          { key: "material", label: "物料主数据", children: <><div className="table-toolbar">{createButton("material")}</div><Table {...tableProps} rowKey="id" dataSource={materials} scroll={{ x: 1100 }} columns={[
-            { title: "物料编码", dataIndex: "code", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
-            { title: "名称", dataIndex: "name" }, { title: "类型", dataIndex: "type" },
-            { title: "材质/牌号", dataIndex: "materialGrade", render: (v) => v ?? "-" },
-            { title: "供应商", dataIndex: "supplier", render: (v) => v ?? "-" }, { title: "单位", dataIndex: "unit" },
-            { title: "卷材规格", render: (_, r) => r.thickness ? `${r.thickness}mm × ${r.width ?? "-"}mm，卷重${r.coilWeight ?? "-"}kg` : "-" },
-            { title: "颗粒信息", render: (_, r) => r.color ? `${r.color}，${r.dryingRequirement ?? "-"}` : "-" },
-            { title: "状态", dataIndex: "status", render: (v) => <StatusTag status={v} /> },
-            { title: "操作", fixed: "right", render: (_, r) => actions("material", r as unknown as Record<string, unknown>) },
-          ]} /></> },
-          { key: "equipment", label: "设备台账", children: <><div className="table-toolbar">{createButton("equipment")}</div><Table {...tableProps} rowKey="id" dataSource={equipments} columns={[
-            { title: "设备编号", dataIndex: "code", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
-            { title: "设备名称", dataIndex: "name" }, { title: "类型", dataIndex: "type" },
-            { title: "所属产线", dataIndex: "line", render: (v) => v ?? "-" }, { title: "产能参数", dataIndex: "capacity", render: (v) => v ?? "-" },
-            { title: "状态", dataIndex: "status", render: (v) => <StatusTag status={v} /> },
-            { title: "操作", render: (_, r) => actions("equipment", r as unknown as Record<string, unknown>) },
-          ]} /></> },
-          { key: "dict", label: "班次 / 不良原因", children: <Space direction="vertical" size="large" style={{ width: "100%" }}>
-            <div><div style={{ marginBottom: 8, fontWeight: 600 }}>班次字典</div>{SHIFTS.map((shift) => <Tag key={shift}>{shift}</Tag>)}</div>
-            <div><div className="table-toolbar"><strong>不良原因字典</strong>{createButton("defect")}</div><Table {...tableProps} rowKey="id" dataSource={defectReasons} columns={[
-              { title: "适用工艺", dataIndex: "appliesTo", width: 120 }, { title: "不良原因", dataIndex: "reason" },
-              { title: "状态", dataIndex: "status", render: (v) => <StatusTag status={v} /> },
-              { title: "操作", render: (_, r) => actions("defect", r as unknown as Record<string, unknown>) },
-            ]} /></div>
-          </Space> },
+          {
+            key: "sku",
+            label: "产品SKU",
+            children: <>
+              <div className="table-toolbar" style={{ flexWrap: "wrap" }}>
+                <Input.Search value={keyword} allowClear placeholder="搜索 SKU、名称、料号或规格" onChange={(event) => setKeyword(event.target.value)} style={{ width: 270 }} />
+                <Select value={typeFilter} allowClear placeholder="产品类型" options={uniqueOptions(skus.map((row) => row.type))} onChange={setTypeFilter} style={{ width: 130 }} />
+                <Select value={extraFilter} allowClear placeholder="产品属性" options={["成品", "半成品"].map((value) => ({ value, label: value }))} onChange={setExtraFilter} style={{ width: 130 }} />
+                <Select value={statusFilter} allowClear placeholder="状态" options={uniqueOptions(skus.map((row) => row.status))} onChange={setStatusFilter} style={{ width: 110 }} />
+                <Button icon={<ReloadOutlined />} onClick={resetFilters}>重置</Button>
+                <span style={{ marginLeft: "auto" }}>{createButton("sku")}</span>
+              </div>
+              <Table {...tableProps} rowKey="id" dataSource={filteredSkus} scroll={{ x: 1100 }} columns={[
+                { title: "SKU编码", dataIndex: "code", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
+                { title: "名称", dataIndex: "name" }, { title: "类型", dataIndex: "type" },
+                { title: "客户料号", dataIndex: "customerCode", render: (v) => v ?? "-" },
+                { title: "内部料号", dataIndex: "internalCode", render: (v) => v ?? "-" },
+                { title: "规格", dataIndex: "spec", render: (v) => v ?? "-" },
+                { title: "标准重量(g)", dataIndex: "stdWeight", render: (v) => v ?? "-" },
+                { title: "产品属性", render: (_, r) => <>{r.isSemiFinished && <Tag>半成品</Tag>}{r.isFinished && <Tag color="green">成品</Tag>}</> },
+                { title: "状态", dataIndex: "status", render: (v) => <StatusTag status={v} /> },
+                { title: "操作", fixed: "right", render: (_, r) => actions("sku", r as unknown as Record<string, unknown>) },
+              ]} />
+            </>,
+          },
+          {
+            key: "material",
+            label: "物料主数据",
+            children: <>
+              <div className="table-toolbar" style={{ flexWrap: "wrap" }}>
+                <Input.Search value={keyword} allowClear placeholder="搜索物料编码、名称、牌号或供应商" onChange={(event) => setKeyword(event.target.value)} style={{ width: 290 }} />
+                <Select value={typeFilter} allowClear placeholder="物料类型" options={uniqueOptions(materials.map((row) => row.type))} onChange={setTypeFilter} style={{ width: 140 }} />
+                <Select value={extraFilter} allowClear showSearch optionFilterProp="label" placeholder="供应商" options={uniqueOptions(materials.map((row) => row.supplier))} onChange={setExtraFilter} style={{ width: 160 }} />
+                <Select value={statusFilter} allowClear placeholder="状态" options={uniqueOptions(materials.map((row) => row.status))} onChange={setStatusFilter} style={{ width: 110 }} />
+                <Button icon={<ReloadOutlined />} onClick={resetFilters}>重置</Button>
+                <span style={{ marginLeft: "auto" }}>{createButton("material")}</span>
+              </div>
+              <Table {...tableProps} rowKey="id" dataSource={filteredMaterials} scroll={{ x: 1100 }} columns={[
+                { title: "物料编码", dataIndex: "code", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
+                { title: "名称", dataIndex: "name" }, { title: "类型", dataIndex: "type" },
+                { title: "材质/牌号", dataIndex: "materialGrade", render: (v) => v ?? "-" },
+                { title: "供应商", dataIndex: "supplier", render: (v) => v ?? "-" }, { title: "单位", dataIndex: "unit" },
+                { title: "卷材规格", render: (_, r) => r.thickness ? `${r.thickness}mm × ${r.width ?? "-"}mm，卷重${r.coilWeight ?? "-"}kg` : "-" },
+                { title: "颗粒信息", render: (_, r) => r.color ? `${r.color}，${r.dryingRequirement ?? "-"}` : "-" },
+                { title: "状态", dataIndex: "status", render: (v) => <StatusTag status={v} /> },
+                { title: "操作", fixed: "right", render: (_, r) => actions("material", r as unknown as Record<string, unknown>) },
+              ]} />
+            </>,
+          },
+          {
+            key: "equipment",
+            label: "设备台账",
+            children: <>
+              <div className="table-toolbar" style={{ flexWrap: "wrap" }}>
+                <Input.Search value={keyword} allowClear placeholder="搜索设备编号、名称、产线或产能" onChange={(event) => setKeyword(event.target.value)} style={{ width: 280 }} />
+                <Select value={typeFilter} allowClear placeholder="设备类型" options={uniqueOptions(equipments.map((row) => row.type))} onChange={setTypeFilter} style={{ width: 140 }} />
+                <Select value={extraFilter} allowClear showSearch optionFilterProp="label" placeholder="所属产线" options={uniqueOptions(equipments.map((row) => row.line))} onChange={setExtraFilter} style={{ width: 140 }} />
+                <Select value={statusFilter} allowClear placeholder="状态" options={uniqueOptions(equipments.map((row) => row.status))} onChange={setStatusFilter} style={{ width: 110 }} />
+                <Button icon={<ReloadOutlined />} onClick={resetFilters}>重置</Button>
+                <span style={{ marginLeft: "auto" }}>{createButton("equipment")}</span>
+              </div>
+              <Table {...tableProps} rowKey="id" dataSource={filteredEquipments} columns={[
+                { title: "设备编号", dataIndex: "code", render: (v) => <span style={{ fontFamily: "ui-monospace, monospace" }}>{v}</span> },
+                { title: "设备名称", dataIndex: "name" }, { title: "类型", dataIndex: "type" },
+                { title: "所属产线", dataIndex: "line", render: (v) => v ?? "-" }, { title: "产能参数", dataIndex: "capacity", render: (v) => v ?? "-" },
+                { title: "状态", dataIndex: "status", render: (v) => <StatusTag status={v} /> },
+                { title: "操作", render: (_, r) => actions("equipment", r as unknown as Record<string, unknown>) },
+              ]} />
+            </>,
+          },
+          {
+            key: "dict",
+            label: "班次 / 不良原因",
+            children: <Space direction="vertical" size="large" style={{ width: "100%" }}>
+              <div><div style={{ marginBottom: 8, fontWeight: 600 }}>班次字典</div>{SHIFTS.map((shift) => <Tag key={shift}>{shift}</Tag>)}</div>
+              <div>
+                <div className="table-toolbar" style={{ flexWrap: "wrap" }}>
+                  <Input.Search value={keyword} allowClear placeholder="搜索不良原因或适用工艺" onChange={(event) => setKeyword(event.target.value)} style={{ width: 260 }} />
+                  <Select value={typeFilter} allowClear placeholder="适用工艺" options={uniqueOptions(defectReasons.map((row) => row.appliesTo))} onChange={setTypeFilter} style={{ width: 130 }} />
+                  <Select value={statusFilter} allowClear placeholder="状态" options={uniqueOptions(defectReasons.map((row) => row.status))} onChange={setStatusFilter} style={{ width: 110 }} />
+                  <Button icon={<ReloadOutlined />} onClick={resetFilters}>重置</Button>
+                  <strong style={{ marginLeft: "auto" }}>不良原因字典</strong>
+                  {createButton("defect")}
+                </div>
+                <Table {...tableProps} rowKey="id" dataSource={filteredDefectReasons} columns={[
+                  { title: "适用工艺", dataIndex: "appliesTo", width: 120 }, { title: "不良原因", dataIndex: "reason" },
+                  { title: "状态", dataIndex: "status", render: (v) => <StatusTag status={v} /> },
+                  { title: "操作", render: (_, r) => actions("defect", r as unknown as Record<string, unknown>) },
+                ]} />
+              </div>
+            </Space>,
+          },
         ]}
       />
 
-      <Modal title={`${editor?.row ? "编辑" : "新增"}${editor ? TITLE[editor.kind] : ""}`} open={!!editor} onCancel={() => setEditor(null)} onOk={() => form.submit()} confirmLoading={pending} width={680} destroyOnClose>
+      <Modal title={`${editor?.row ? "编辑" : "新增"}${editor ? TITLE[editor.kind] : ""}`} open={!!editor} onCancel={() => setEditor(null)} onOk={() => form.submit()} confirmLoading={pending} width={680} destroyOnHidden>
         <Form form={form} layout="vertical" onFinish={save} preserve={false}>
           {editor?.kind === "sku" && <>
             <Form.Item name="code" label="SKU 编码" rules={[{ required: true }]}><Input /></Form.Item>

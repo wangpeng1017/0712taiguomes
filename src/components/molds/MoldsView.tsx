@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { Button, Card, Checkbox, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, message } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { MAINT_TYPES, MOLD_STATUS, MOLD_TYPES } from "@/lib/constants";
 import { StatusTag } from "@/components/StatusTag";
@@ -31,10 +31,45 @@ export function MoldsView({ molds, skus, equipments }: { molds: Mold[]; skus: Sk
   const [maintTarget, setMaintTarget] = useState<Mold | null>(null);
   const [editingMaintenance, setEditingMaintenance] = useState<Maintenance | null>(null);
   const [moldEditor, setMoldEditor] = useState<Mold | "new" | null>(null);
+  const [keyword, setKeyword] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>();
+  const [statusFilter, setStatusFilter] = useState<string>();
+  const [lifeFilter, setLifeFilter] = useState<string>();
   const [pending, startTransition] = useTransition();
   const [form] = Form.useForm();
   const [moldForm] = Form.useForm();
   const moldType = Form.useWatch("type", moldForm);
+  const filteredMolds = useMemo(() => {
+    const normalizedKeyword = keyword.trim().toLowerCase();
+    return molds.filter((mold) => {
+      const searchableText = [
+        mold.name,
+        mold.code,
+        mold.applicableSku?.name,
+        mold.applicableSku?.code,
+        mold.applicableEquipment?.name,
+        mold.applicableEquipment?.code,
+      ].filter(Boolean).join(" ").toLowerCase();
+      const lifeRate = mold.currentCount / mold.designLife;
+      const matchesLife = !lifeFilter
+        || (lifeFilter === "normal" && lifeRate < mold.warnThreshold)
+        || (lifeFilter === "warning" && lifeRate >= mold.warnThreshold && lifeRate < 1)
+        || (lifeFilter === "overdue" && lifeRate >= 1);
+      return (!normalizedKeyword || searchableText.includes(normalizedKeyword))
+        && (!typeFilter || mold.type === typeFilter)
+        && (!statusFilter || mold.status === statusFilter)
+        && matchesLife;
+    });
+  }, [keyword, lifeFilter, molds, statusFilter, typeFilter]);
+
+  const typeOptions = useMemo(
+    () => Array.from(new Set(molds.map((mold) => mold.type))).map((value) => ({ value, label: value })),
+    [molds]
+  );
+  const statusOptions = useMemo(
+    () => Array.from(new Set(molds.map((mold) => mold.status))).map((value) => ({ value, label: value })),
+    [molds]
+  );
 
   function submitMaintenance(values: {
     maintType: string; person: string; content?: string; replacedParts?: string; result?: string; canContinue: boolean;
@@ -116,10 +151,29 @@ export function MoldsView({ molds, skus, equipments }: { molds: Mold[]; skus: Sk
 
   return (
     <>
-      <div className="table-toolbar"><Button type="primary" icon={<PlusOutlined />} onClick={() => openMoldEditor()}>新增模具</Button></div>
+      <div className="table-toolbar" style={{ flexWrap: "wrap" }}>
+        <Input prefix={<SearchOutlined />} allowClear placeholder="搜索模具、产品或设备" value={keyword} onChange={(event) => setKeyword(event.target.value)} style={{ width: 280 }} />
+        <Select allowClear placeholder="全部类型" value={typeFilter} onChange={setTypeFilter} options={typeOptions} style={{ width: 130 }} />
+        <Select allowClear placeholder="全部状态" value={statusFilter} onChange={setStatusFilter} options={statusOptions} style={{ width: 140 }} />
+        <Select
+          allowClear
+          placeholder="全部寿命区间"
+          value={lifeFilter}
+          onChange={setLifeFilter}
+          style={{ width: 150 }}
+          options={[
+            { value: "normal", label: "寿命正常" },
+            { value: "warning", label: "寿命预警" },
+            { value: "overdue", label: "已超寿命" },
+          ]}
+        />
+        <Button onClick={() => { setKeyword(""); setTypeFilter(undefined); setStatusFilter(undefined); setLifeFilter(undefined); }}>重置</Button>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => openMoldEditor()}>新增模具</Button>
+      </div>
       <Table
         rowKey="id"
-        dataSource={molds}
+        dataSource={filteredMolds}
+        pagination={{ pageSize: 10, showSizeChanger: true }}
         columns={[
           { title: "模具", render: (_, r) => (
               <div>
@@ -202,7 +256,7 @@ export function MoldsView({ molds, skus, equipments }: { molds: Mold[]; skus: Sk
         )}
       </Drawer>
 
-      <Modal title={moldEditor === "new" ? "新增模具" : "编辑模具"} open={!!moldEditor} onCancel={() => setMoldEditor(null)} onOk={() => moldForm.submit()} confirmLoading={pending} width={700} destroyOnClose>
+      <Modal title={moldEditor === "new" ? "新增模具" : "编辑模具"} open={!!moldEditor} onCancel={() => setMoldEditor(null)} onOk={() => moldForm.submit()} confirmLoading={pending} width={700} destroyOnHidden>
         <Form form={moldForm} layout="vertical" onFinish={submitMold} preserve={false}>
           <Space align="start"><Form.Item name="code" label="模具编号" rules={[{ required: true }]}><Input style={{ width: 210 }} /></Form.Item><Form.Item name="name" label="模具名称" rules={[{ required: true }]}><Input style={{ width: 250 }} /></Form.Item></Space>
           <Space align="start"><Form.Item name="type" label="类型" rules={[{ required: true }]}><Select style={{ width: 180 }} options={MOLD_TYPES.map((value) => ({ value, label: value }))} /></Form.Item><Form.Item name="status" label="状态" rules={[{ required: true }]}><Select style={{ width: 180 }} options={MOLD_STATUS.map((value) => ({ value, label: value }))} /></Form.Item></Space>
