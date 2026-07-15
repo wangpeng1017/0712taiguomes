@@ -145,7 +145,7 @@ export function MaterialsView({
           { title: "检验状态", dataIndex: "inspectStatus", render: (v) => <StatusTag status={v} /> },
           { title: "库存状态", dataIndex: "stockStatus", render: (v) => <StatusTag status={v} /> },
           { title: "仓库", dataIndex: "warehouse", render: (v) => v ?? "-" },
-          { title: "操作", render: (_, r) => <Space size="small"><Button type="link" size="small" onClick={() => { setLotEditor(r); queueMicrotask(() => lotForm.setFieldsValue(r)); }}>编辑</Button><Button type="link" size="small" danger onClick={() => Modal.confirm({ title: `删除物料批次 ${r.lotNo}`, content: "仅未被任何业务引用的批次可以删除。", okButtonProps: { danger: true }, onOk: () => removeLot(r.id) })}>删除</Button></Space> },
+          { title: "操作", render: (_, r) => <Space size="small"><Button type="link" size="small" onClick={() => { setLotEditor(r); queueMicrotask(() => lotForm.setFieldsValue(r)); }}>编辑</Button><Button className="mes-destructive-action" type="link" size="small" onClick={() => Modal.confirm({ title: `删除物料批次 ${r.lotNo}`, content: "仅未被任何业务引用的批次可以删除。", okButtonProps: { className: "mes-destructive-confirm" }, onOk: () => removeLot(r.id) })}>删除</Button></Space> },
         ]}
       />
     </>
@@ -211,7 +211,7 @@ export function MaterialsView({
             { title: "操作", render: (_, r) => (
                 <Space size="small">
                   {r.remainingGoodQty > 0 && <Button size="small" type="link" onClick={() => setStockInTarget(r)}>良品入库</Button>}
-                  {r.remainingBadQty > 0 && <Button size="small" type="link" danger onClick={() => setIsolationTarget(r)}>不良隔离</Button>}
+                  {r.remainingBadQty > 0 && <Button className="mes-destructive-action" size="small" type="link" onClick={() => setIsolationTarget(r)}>不良隔离</Button>}
                 </Space>
               ) },
           ]}
@@ -232,7 +232,7 @@ export function MaterialsView({
             { title: "仓库", dataIndex: "warehouse" },
             { title: "入库人", dataIndex: "inBy" },
             { title: "入库时间", render: (_, r) => dayjs(r.inAt).format("MM-DD HH:mm") },
-            { title: "操作", render: (_, r) => <Space size="small"><Button type="link" size="small" onClick={() => { setStockRecordEditor(r); queueMicrotask(() => stockRecordForm.setFieldsValue(r)); }}>编辑</Button><Button type="link" size="small" danger onClick={() => Modal.confirm({ title: `撤销记录 ${r.no}`, content: "撤销后对应数量将重新出现在待处理列表。", okButtonProps: { danger: true }, onOk: () => removeStockIn(r.id) })}>撤销</Button></Space> },
+            { title: "操作", render: (_, r) => <Space size="small"><Button type="link" size="small" onClick={() => { setStockRecordEditor(r); queueMicrotask(() => stockRecordForm.setFieldsValue(r)); }}>编辑</Button><Button className="mes-destructive-action" type="link" size="small" onClick={() => Modal.confirm({ title: `撤销记录 ${r.no}`, content: "撤销后对应数量将重新出现在待处理列表。", okButtonProps: { className: "mes-destructive-confirm" }, onOk: () => removeStockIn(r.id) })}>撤销</Button></Space> },
           ]}
         />
       </Card>

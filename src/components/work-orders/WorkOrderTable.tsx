@@ -125,7 +125,7 @@ export function WorkOrderTable({
     Modal.confirm({
       title: `删除工单 ${row.no}`,
       content: "只有未下达且没有任何业务记录的工单可以删除。",
-      okText: "确认删除", okButtonProps: { danger: true }, cancelText: "取消",
+      okText: "确认删除", okButtonProps: { className: "mes-destructive-confirm" }, cancelText: "取消",
       onOk: () => new Promise<void>((resolve, reject) => startTransition(async () => {
         try { await deleteWorkOrder(row.id); message.success("工单已删除"); resolve(); }
         catch (error) { message.error(error instanceof Error ? error.message : "删除失败"); reject(error); }
@@ -200,9 +200,9 @@ export function WorkOrderTable({
                   <Button size="small" type="link" onClick={() => changeStatus(r.id, "已完工", "完工")}>完工</Button>
                 )}
                 {["已下达", "生产中", "暂停", "已完工"].includes(r.status) && (
-                  <Button size="small" type="link" danger onClick={() => changeStatus(r.id, "已关闭", "关闭")}>关闭</Button>
+                  <Button className="mes-destructive-action" size="small" type="link" onClick={() => changeStatus(r.id, "已关闭", "关闭")}>关闭</Button>
                 )}
-                {r.status === "未下达" && r.batchCount === 0 && <Button size="small" type="link" danger onClick={() => removeWorkOrder(r)}>删除</Button>}
+                {r.status === "未下达" && r.batchCount === 0 && <Button className="mes-destructive-action" size="small" type="link" onClick={() => removeWorkOrder(r)}>删除</Button>}
               </Space>
             ) },
         ]}

@@ -1,35 +1,54 @@
 import type { ThemeConfig } from "antd";
 
-// 工业风主题 token：石墨侧边栏 + 安全橙主色 + 语义状态色（good/warn/critical/info 独立于主色）。
-// 校验过 CVD 可访问性（见 dataviz skill 的 validate_palette 结果）。
+// 工业控制台主题：石墨侧边栏 + 安全橙主操作 + Slate 中性色。
+// 红色仅用于错误和阻断状态，不用于操作按钮。
 export const themeConfig: ThemeConfig = {
   token: {
-    colorPrimary: "#e0650f",
+    colorPrimary: "#c6540d",
+    colorPrimaryHover: "#ad4609",
+    colorPrimaryActive: "#913a08",
     colorSuccess: "#1f9d55",
     colorWarning: "#c9860a",
     colorError: "#dc3545",
     colorInfo: "#3b82c4",
-    colorBgLayout: "#f2f4f6",
+    colorText: "#17202a",
+    colorTextSecondary: "#5b6876",
+    colorTextTertiary: "#64748b",
+    colorBorder: "#cfd6df",
+    colorBorderSecondary: "#e2e7ed",
+    colorBgLayout: "#f3f5f7",
     colorBgContainer: "#ffffff",
     borderRadius: 6,
+    borderRadiusLG: 8,
+    controlHeight: 34,
+    controlHeightSM: 28,
     fontSize: 14,
+    boxShadowSecondary: "0 10px 28px rgba(23, 32, 42, 0.10)",
     wireframe: false,
   },
   components: {
     Layout: {
-      siderBg: "#3b3f48",
+      siderBg: "#30343b",
       headerBg: "#ffffff",
-      bodyBg: "#f2f4f6",
+      bodyBg: "#f3f5f7",
     },
     Menu: {
-      darkItemBg: "#3b3f48",
-      darkItemSelectedBg: "#2a3542",
-      darkItemHoverBg: "#22303c",
-      darkItemColor: "#c3ccd6",
+      darkItemBg: "#30343b",
+      darkItemSelectedBg: "#24303b",
+      darkItemHoverBg: "#39424d",
+      darkItemColor: "#c9d1da",
       darkItemSelectedColor: "#ffffff",
+      itemBorderRadius: 4,
+      itemMarginInline: 8,
     },
     Table: {
-      headerBg: "#f7f8fa",
+      headerBg: "#f1f4f7",
+      headerColor: "#334155",
+      rowHoverBg: "#fff7ed",
+      borderColor: "#e2e7ed",
+    },
+    Card: {
+      headerBg: "#ffffff",
     },
   },
 };

@@ -310,7 +310,7 @@ export function ProductionReportForm({
                               </Form.Item>
                             </Col>
                             <Col span={2}>
-                              <Button size="small" danger onClick={() => remove(field.name)}>
+                              <Button className="mes-destructive-action" size="small" onClick={() => remove(field.name)}>
                                 删
                               </Button>
                             </Col>

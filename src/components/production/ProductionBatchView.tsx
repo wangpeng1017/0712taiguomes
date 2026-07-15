@@ -96,7 +96,7 @@ export function ProductionBatchView(props: FormProps & { batches: Batch[] }) {
       fixed: "right",
       render: (_, row) => row.kind === "workOrder"
         ? <Button type="link" size="small" onClick={() => { setInitialWorkOrderId(row.workOrder.id); setCreateOpen(true); }}>新增报工</Button>
-        : <Space><Button type="link" size="small" onClick={() => setDetail(row.batch)}>详情</Button>{row.batch.status !== "已作废" && <Button danger type="link" size="small" disabled={row.batch.stockInQty > 0 || pending} onClick={() => confirmVoid(row.batch)}>作废</Button>}</Space>,
+        : <Space><Button type="link" size="small" onClick={() => setDetail(row.batch)}>详情</Button>{row.batch.status !== "已作废" && <Button className="mes-destructive-action" type="link" size="small" disabled={row.batch.stockInQty > 0 || pending} onClick={() => confirmVoid(row.batch)}>作废</Button>}</Space>,
     },
   ];
 
@@ -106,7 +106,7 @@ export function ProductionBatchView(props: FormProps & { batches: Batch[] }) {
       title: `作废生产批次 ${batch.batchNo}`,
       content: <Input.TextArea rows={3} placeholder="请输入作废原因" onChange={(event) => { reason = event.target.value; }} />,
       okText: "确认作废",
-      okButtonProps: { danger: true },
+      okButtonProps: { className: "mes-destructive-confirm" },
       cancelText: "取消",
       onOk: () => new Promise<void>((resolve, reject) => {
         if (!reason.trim()) {
@@ -171,7 +171,7 @@ export function ProductionBatchView(props: FormProps & { batches: Batch[] }) {
             {detail.note && <Descriptions.Item label="备注" span={2}>{detail.note}</Descriptions.Item>}
           </Descriptions>
           <Table size="small" pagination={false} rowKey="id" dataSource={detail.defects} locale={{ emptyText: "无不良记录" }} columns={[{ title: "不良原因", dataIndex: "reason" }, { title: "数量", dataIndex: "qty" }, { title: "处理", dataIndex: "action", render: (value) => value ? <Tag>{value}</Tag> : "-" }]} />
-          {detail.status !== "已作废" && <Button danger disabled={detail.stockInQty > 0 || pending} onClick={() => confirmVoid(detail)}>作废该批次</Button>}
+          {detail.status !== "已作废" && <Button className="mes-destructive-action" disabled={detail.stockInQty > 0 || pending} onClick={() => confirmVoid(detail)}>作废该批次</Button>}
         </Space>}
       </Drawer>
     </>

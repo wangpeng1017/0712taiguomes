@@ -41,30 +41,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      <Sider width={220} theme="dark">
-        <div
-          style={{
-            height: 56,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "0 18px",
-            color: "#fff",
-            borderBottom: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: 2,
-              background: "#e0650f",
-              display: "inline-block",
-            }}
-          />
-          <div style={{ fontSize: 15, fontWeight: 700 }}>MES</div>
+      <Sider width={220} theme="dark" className="mes-sider">
+        <div className="mes-brand">
+          <span className="mes-brand-mark" aria-hidden="true" />
+          <div className="mes-brand-name">{locale === "en" ? "MES Manufacturing" : "MES 制造执行"}</div>
         </div>
         <Menu
+          className="mes-sidebar-menu"
           theme="dark"
           mode="inline"
           selectedKeys={[activeKey]}
@@ -77,20 +60,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
       </Sider>
       <Layout>
-        <Header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 24px",
-            borderBottom: "1px solid #e2e6ea",
-          }}
-        >
-          <div style={{ fontSize: 16, fontWeight: 600, color: "#12181f" }}>
-            {PAGE_TITLES[activeKey]}
-          </div>
+        <Header className="mes-header">
+          <div className="mes-page-title">{PAGE_TITLES[activeKey]}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <Segmented
+              aria-label="界面语言"
               size="small"
               value={locale}
               onChange={(value) => setLocale(value as "zh" | "en")}
@@ -98,7 +72,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             />
           </div>
         </Header>
-        <Content style={{ padding: 24 }}>{children}</Content>
+        <Content className="mes-content">{children}</Content>
       </Layout>
     </Layout>
   );

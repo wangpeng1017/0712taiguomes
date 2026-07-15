@@ -5,7 +5,7 @@ import { LanguageProvider } from "@/components/layout/LanguageProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MES",
+  title: "MES 制造执行",
   description: "Manufacturing Execution System",
 };
 

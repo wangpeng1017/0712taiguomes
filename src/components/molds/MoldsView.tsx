@@ -99,7 +99,7 @@ export function MoldsView({ molds, skus, equipments }: { molds: Mold[]; skus: Sk
 
   function removeMold(mold: Mold) {
     Modal.confirm({
-      title: `删除模具 ${mold.code}`, content: "已有业务记录的模具将拒绝删除。", okButtonProps: { danger: true },
+      title: `删除模具 ${mold.code}`, content: "已有业务记录的模具将拒绝删除。", okButtonProps: { className: "mes-destructive-confirm" },
       onOk: () => new Promise<void>((resolve, reject) => startTransition(async () => {
         try { await deleteMold(mold.id); message.success("模具已删除"); resolve(); }
         catch (error) { message.error(error instanceof Error ? error.message : "删除失败"); reject(error); }
@@ -143,7 +143,7 @@ export function MoldsView({ molds, skus, equipments }: { molds: Mold[]; skus: Sk
                 <Button size="small" type="link" onClick={() => setDetail(r)}>详情</Button>
                 <Button size="small" type="link" onClick={() => openMoldEditor(r)}>编辑</Button>
                 <Button size="small" type="link" onClick={() => { setEditingMaintenance(null); form.resetFields(); setMaintTarget(r); }}>登记保养</Button>
-                <Button size="small" type="link" danger onClick={() => removeMold(r)}>删除</Button>
+                <Button className="mes-destructive-action" size="small" type="link" onClick={() => removeMold(r)}>删除</Button>
               </Space>
             ) },
         ]}
@@ -194,7 +194,7 @@ export function MoldsView({ molds, skus, equipments }: { molds: Mold[]; skus: Sk
                   { title: "内容", dataIndex: "content", render: (v) => v ?? "-" },
                   { title: "可继续生产", dataIndex: "canContinue", render: (v) => (v ? <Tag color="green">是</Tag> : <Tag color="red">否</Tag>) },
                   { title: "时间", render: (_, r) => dayjs(r.startTime).format("MM-DD HH:mm") },
-                  { title: "操作", render: (_, r) => <Space size="small"><Button type="link" size="small" onClick={() => { setEditingMaintenance(r); setMaintTarget(detail); queueMicrotask(() => form.setFieldsValue(r)); }}>编辑</Button><Button type="link" size="small" danger onClick={() => Modal.confirm({ title: "删除该保养记录？", okButtonProps: { danger: true }, onOk: () => removeMaintenance(r.id) })}>删除</Button></Space> },
+                  { title: "操作", render: (_, r) => <Space size="small"><Button type="link" size="small" onClick={() => { setEditingMaintenance(r); setMaintTarget(detail); queueMicrotask(() => form.setFieldsValue(r)); }}>编辑</Button><Button className="mes-destructive-action" type="link" size="small" onClick={() => Modal.confirm({ title: "删除该保养记录？", okButtonProps: { className: "mes-destructive-confirm" }, onOk: () => removeMaintenance(r.id) })}>删除</Button></Space> },
                 ]}
               />
             </Card>

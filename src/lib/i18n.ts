@@ -1,6 +1,7 @@
 export type AppLocale = "zh" | "en";
 
 const EN: Record<string, string> = {
+  "MES 制造执行": "MES Manufacturing",
   "仪表盘": "Dashboard", "生产工单": "Work Orders", "注塑报工": "Injection Reporting", "冲压报工": "Stamping Reporting",
   "物料批次": "Material Lots", "模具台账": "Molds", "批次追溯": "Traceability", "生产日报": "Production Report", "基础数据": "Master Data",
   "新增报工": "New Report", "待报工": "Pending Report", "待生成": "Pending", "生产批次": "Production Batch", "生产批次号": "Batch No.", "生产批次全链路": "Production Batch Trace",

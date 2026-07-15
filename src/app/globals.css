@@ -1,5 +1,18 @@
+:root {
+  --mes-accent: #c6540d;
+  --mes-accent-soft: #fff7ed;
+  --mes-sidebar: #30343b;
+  --mes-text: #17202a;
+  --mes-text-secondary: #5b6876;
+  --mes-border: #d9dee5;
+  --mes-slate: #52606d;
+  --mes-slate-hover: #334155;
+  --mes-slate-soft: #f1f5f9;
+}
+
 html,
 body {
+  margin: 0;
   max-width: 100vw;
   overflow-x: hidden;
 }
@@ -17,6 +30,8 @@ body {
 }
 
 body {
+  color: var(--mes-text);
+  background: #f3f5f7;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -29,6 +44,137 @@ body {
 
 a {
   color: inherit;
+}
+
+.mes-sider {
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mes-brand {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mes-brand-mark {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 2px;
+  background: var(--mes-accent);
+  box-shadow: 0 0 0 3px rgba(198, 84, 13, 0.16);
+}
+
+.mes-brand-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.mes-sidebar-menu .ant-menu-item {
+  transition: color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.mes-sidebar-menu .ant-menu-item-selected {
+  box-shadow: inset 3px 0 0 var(--mes-accent);
+}
+
+.mes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--mes-border);
+}
+
+.mes-page-title {
+  color: var(--mes-text);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.mes-content {
+  padding: 24px;
+}
+
+.ant-card,
+.ant-table-wrapper .ant-table-container {
+  border-color: var(--mes-border);
+}
+
+.ant-btn {
+  transition: color 180ms ease, border-color 180ms ease, background-color 180ms ease,
+    box-shadow 180ms ease, transform 180ms ease;
+}
+
+.ant-btn-primary:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+/* 删除、关闭、作废、撤销等高风险操作统一使用中性样式，语义由文字和二次确认表达。 */
+.ant-btn.mes-destructive-action,
+.ant-btn.ant-btn-dangerous {
+  color: var(--mes-slate) !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.ant-btn.mes-destructive-action:not(:disabled):hover,
+.ant-btn.ant-btn-dangerous:not(:disabled):hover {
+  color: var(--mes-slate-hover) !important;
+  border-color: #cbd5e1 !important;
+  background: var(--mes-slate-soft) !important;
+}
+
+.ant-btn.mes-destructive-confirm,
+.ant-btn-primary.ant-btn-dangerous {
+  color: #fff !important;
+  border-color: var(--mes-slate) !important;
+  background: var(--mes-slate) !important;
+  box-shadow: none !important;
+}
+
+.ant-btn.mes-destructive-confirm:not(:disabled):hover,
+.ant-btn-primary.ant-btn-dangerous:not(:disabled):hover {
+  color: #fff !important;
+  border-color: var(--mes-slate-hover) !important;
+  background: var(--mes-slate-hover) !important;
+}
+
+.ant-btn:focus-visible,
+.ant-input:focus-visible,
+.ant-select-selector:focus-visible {
+  outline: 2px solid var(--mes-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  .mes-content {
+    padding: 16px;
+  }
+
+  .table-toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 .tabular-nums {

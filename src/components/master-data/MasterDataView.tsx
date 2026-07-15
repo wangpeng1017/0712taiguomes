@@ -74,7 +74,7 @@ export function MasterDataView({ skus, materials, equipments, defectReasons }: {
     <Space size="small">
       <Button type="link" size="small" onClick={() => openEditor(kind, row)}>编辑</Button>
       <Popconfirm title={`确认删除该${TITLE[kind]}？`} description="已被业务数据引用时将拒绝删除。" onConfirm={() => remove(kind, row.id as string)}>
-        <Button type="link" size="small" danger disabled={pending}>删除</Button>
+        <Button className="mes-destructive-action" type="link" size="small" disabled={pending}>删除</Button>
       </Popconfirm>
     </Space>
   );
