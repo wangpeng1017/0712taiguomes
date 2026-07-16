@@ -19,20 +19,33 @@ async function main() {
     where: { status: "已发布", route: { code: "RT-INJ-CN-001" } },
     include: { route: true },
   });
+  const bomVersion = await prisma.bomVersion.findFirstOrThrow({
+    where: { status: "已发布", bom: { status: "启用", skuId: version.route.skuId } },
+    include: { bom: true, items: { where: { status: "启用" }, take: 1 } },
+    orderBy: { version: "desc" },
+  });
   const [equipment, mold, materialLot] = await Promise.all([
     prisma.equipmentMaster.findUniqueOrThrow({ where: { code: "INJ01" } }),
     prisma.moldMaster.findUniqueOrThrow({ where: { code: "MLD-INJ-001" } }),
-    prisma.materialLot.findFirstOrThrow({ where: { material: { type: "塑料颗粒" }, stockStatus: "可用" } }),
+    prisma.materialLot.findFirstOrThrow({ where: { materialId: bomVersion.items[0]?.materialId, stockStatus: "可用" } }),
   ]);
+  const earliestEffective = Math.max(
+    new Date("2026-07-16T08:00:00+07:00").getTime(),
+    version.effectiveFrom?.getTime() ?? 0,
+    bomVersion.effectiveFrom?.getTime() ?? 0,
+  );
+  const smokeStart = new Date(earliestEffective);
+  const smokeEnd = new Date(earliestEffective + 12 * 60 * 60 * 1000);
 
   await runAction(() => createWorkOrder({
     skuId: version.route.skuId,
     planQty: 10,
-    planStart: "2026-07-16T08:00:00+07:00",
-    planEnd: "2026-07-16T20:00:00+07:00",
+    planStart: smokeStart.toISOString(),
+    planEnd: smokeEnd.toISOString(),
     planEquipmentId: equipment.id,
     planMoldId: mold.id,
-    bomVersion: "V1.0",
+    bomVersion: bomVersion.version,
+    bomVersionId: bomVersion.id,
     routeVersionId: version.id,
     note: marker,
   }));
@@ -45,6 +58,9 @@ async function main() {
   assert.equal(operations.length, 5);
   assert.equal(operations[0].status, "可开工");
   assert.equal(operations[1].status, "等待前序");
+  const frozenRequirement = await prisma.workOrderMaterialRequirement.findFirstOrThrow({
+    where: { workOrderId: workOrder.id, operationSequence: operations[0].sequence },
+  });
 
   async function report(
     operation: (typeof operations)[number],
@@ -57,12 +73,12 @@ async function main() {
       workOrderOperationId: operation.id,
       equipmentId: operation.requiresEquipment ? equipment.id : undefined,
       moldId: operation.requiresMold ? mold.id : undefined,
-      materialInputs: sourceBatchInputs.length ? [] : [{ materialLotId: materialLot.id, qty: 0.2, consumptionType: "主料" }],
+      materialInputs: sourceBatchInputs.length ? [] : [{ materialLotId: materialLot.id, qty: 0.2, consumptionType: "主料", requirementId: frozenRequirement.id }],
       sourceBatchInputs,
       shift: "白班",
       operator: "PROCESS-SMOKE",
-      startTime: `2026-07-16T${String(8 + operations.indexOf(operation)).padStart(2, "0")}:00:00+07:00`,
-      endTime: `2026-07-16T${String(9 + operations.indexOf(operation)).padStart(2, "0")}:00:00+07:00`,
+      startTime: new Date(smokeStart.getTime() + operations.indexOf(operation) * 60 * 60 * 1000).toISOString(),
+      endTime: new Date(smokeStart.getTime() + (operations.indexOf(operation) + 1) * 60 * 60 * 1000).toISOString(),
       goodQty,
       badQty,
       defects: badQty > 0 ? [{ reasonId: options.defectReasonId!, qty: badQty, responsible: "工艺", action: "返工" }] : [],

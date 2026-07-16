@@ -8,6 +8,8 @@ export async function getWorkOrdersWithProgress() {
       planEquipment: true,
       planMold: true,
       routeVersion: { include: { route: true } },
+      bomDefinition: { include: { bom: true } },
+      materialRequirements: { orderBy: [{ operationSequence: "asc" }, { materialCode: "asc" }] },
       operations: { orderBy: { sequence: "asc" } },
       batches: { where: { status: "已完工" }, select: { goodQty: true, badQty: true } },
     },
@@ -33,7 +35,7 @@ export async function getWorkOrdersWithProgress() {
 }
 
 export async function getWorkOrderFormOptions() {
-  const [skus, equipments, molds, routeVersions] = await Promise.all([
+  const [skus, equipments, molds, routeVersions, bomVersions] = await Promise.all([
     prisma.productSku.findMany({ where: { status: "启用" }, orderBy: { code: "asc" } }),
     prisma.equipmentMaster.findMany({ orderBy: { code: "asc" } }),
     prisma.moldMaster.findMany({ orderBy: { code: "asc" } }),
@@ -42,6 +44,7 @@ export async function getWorkOrderFormOptions() {
       include: { route: { include: { sku: true } }, operations: { orderBy: { sequence: "asc" } } },
       orderBy: [{ route: { code: "asc" } }, { version: "desc" }],
     }),
+    prisma.bomVersion.findMany({ where: { status: "已发布", bom: { status: "启用" } }, include: { bom: true, items: { where: { status: "启用" }, include: { material: true } } }, orderBy: [{ bom: { code: "asc" } }, { version: "desc" }] }),
   ]);
-  return { skus, equipments, molds, routeVersions };
+  return { skus, equipments, molds, routeVersions, bomVersions };
 }

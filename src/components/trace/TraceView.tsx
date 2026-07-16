@@ -5,7 +5,7 @@ import { Alert, Button, Card, Col, Descriptions, Empty, Row, Select, Space, Stat
 import dayjs from "dayjs";
 import { StatusTag } from "@/components/StatusTag";
 import { MoldLifeMeter } from "@/components/MoldLifeMeter";
-import type { TraceGenealogyEdge, TraceMaterialConsumption, TraceOperation, TraceQualityResult, TraceReworkOrder } from "@/lib/queries/trace";
+import type { TraceGenealogyEdge, TraceMaterialConsumption, TraceMaterialRequirement, TraceOperation, TraceQualityResult, TraceReworkOrder } from "@/lib/queries/trace";
 
 type Defect = { id: string; qty: number; responsible: string | null; action: string | null; reason: { reason: string } };
 type StockIn = { id: string; no: string; type: string; qty: number; warehouse: string | null; inBy: string; inAt: string };
@@ -27,6 +27,8 @@ type Batch = {
   leaderConfirmedBy: string | null;
   leaderConfirmedAt: string | null;
   workOrder: { no: string; planQty: number };
+  bomVersion: { code: string; name: string; version: string } | null;
+  materialRequirements: TraceMaterialRequirement[];
   sku: { name: string; code: string };
   equipment: { code: string; name: string } | null;
   mold: { code: string; name: string } | null;
@@ -45,6 +47,16 @@ type Mold = { id: string; code: string; name: string; currentCount: number; desi
 type Capabilities = { routes: boolean; operations: boolean; genealogy: boolean; quality: boolean; rework: boolean };
 type TraceRow = { key: string; batch: Batch; level: number; relationType: string; qty: number | null; parentBatchNo: string | null; operator: string; remark: string };
 export type TraceSection = "forward" | "reverse" | "molds";
+
+function quantity(value: number) {
+  return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 4 }).format(value);
+}
+
+function varianceRate(standardQty: number, consumedQty: number) {
+  if (standardQty <= 0) return "-";
+  const rate = ((consumedQty - standardQty) / standardQty) * 100;
+  return `${rate > 0 ? "+" : ""}${rate.toFixed(2)}%`;
+}
 
 function relationColor(relationType: string): string {
   if (relationType.includes("返工")) return "orange";
@@ -158,6 +170,7 @@ function BatchDetail({ batch, operations }: { batch: Batch; operations: TraceOpe
         <Descriptions.Item label="工单"><span className="mes-code">{batch.workOrder.no}</span></Descriptions.Item>
         <Descriptions.Item label="产品">{batch.sku.name}（{batch.sku.code}）</Descriptions.Item>
         <Descriptions.Item label="工艺路线版本">{batch.routeVersion?.label ?? "历史单工序路线"}</Descriptions.Item>
+        <Descriptions.Item label="BOM 版本">{batch.bomVersion ? `${batch.bomVersion.name}（${batch.bomVersion.code}）· ${batch.bomVersion.version}` : "未绑定"}</Descriptions.Item>
         <Descriptions.Item label="当前工序">{batch.operation ? `${batch.operation.sequence}. ${batch.operation.name}（${batch.operation.code}）` : "历史单工序"}</Descriptions.Item>
         <Descriptions.Item label="工作中心">{batch.operation?.workCenter ?? "-"}</Descriptions.Item>
         <Descriptions.Item label="设备 / 模具">{batch.equipment?.code ?? "-"} / {batch.mold?.code ?? "-"}</Descriptions.Item>
@@ -171,6 +184,31 @@ function BatchDetail({ batch, operations }: { batch: Batch; operations: TraceOpe
       </Descriptions>
 
       <Card size="small" title="工艺路线与工序时间轴"><OperationTimeline operations={routeOperations} /></Card>
+
+      <Card size="small" title="BOM 标准用量与实际执行（工单累计）">
+        <Table
+          size="small"
+          pagination={false}
+          rowKey="id"
+          scroll={{ x: 900 }}
+          dataSource={batch.materialRequirements}
+          locale={{ emptyText: "该工单暂无 BOM 用量快照" }}
+          columns={[
+            { title: "工序", width: 125, render: (_, row) => row.operationSequence ? `${row.operationSequence} ${row.operationName ?? row.operationCode ?? ""}` : "通用/首工序" },
+            { title: "物料", width: 190, render: (_, row) => <div><div>{row.materialName}</div><div className="mes-code mes-meta">{row.materialCode}</div></div> },
+            { title: "标准需求", width: 110, render: (_, row) => <span className="tabular-nums">{quantity(row.standardQty)} {row.unit}</span> },
+            { title: "含损耗需求", width: 120, render: (_, row) => <span className="tabular-nums">{quantity(row.requiredQty)} {row.unit}</span> },
+            { title: "已领", width: 90, render: (_, row) => <span className="tabular-nums">{quantity(row.issuedQty)}</span> },
+            { title: "已耗", width: 90, render: (_, row) => <span className="tabular-nums">{quantity(row.consumedQty)}</span> },
+            { title: "剩余需求", width: 105, render: (_, row) => <span className="tabular-nums">{quantity(Math.max(row.requiredQty - row.consumedQty, 0))}</span> },
+            { title: "耗用差异", width: 105, render: (_, row) => {
+              const difference = row.consumedQty - row.standardQty;
+              return <span className="tabular-nums">{difference > 0 ? "+" : ""}{quantity(difference)}</span>;
+            } },
+            { title: "差异率", width: 90, render: (_, row) => <span className="tabular-nums">{varianceRate(row.standardQty, row.consumedQty)}</span> },
+          ]}
+        />
+      </Card>
 
       <Row gutter={16}>
         <Col span={12}>

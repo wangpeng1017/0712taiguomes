@@ -32,6 +32,7 @@ model ProductSku {
   workOrders    WorkOrder[]
   batches       ProductionBatch[]
   processRoutes ProcessRoute[]
+  bomMasters    BomMaster[]
 }
 
 model MaterialMaster {
@@ -54,7 +55,10 @@ model MaterialMaster {
   color             String?
   dryingRequirement String?
 
-  lots MaterialLot[]
+  lots                  MaterialLot[]
+  bomItems              BomItem[]
+  bomSubstitutes        BomSubstitute[]
+  workOrderRequirements WorkOrderMaterialRequirement[]
 }
 
 model EquipmentMaster {
@@ -139,6 +143,85 @@ model ProcessRoute {
   versions ProcessRouteVersion[]
 }
 
+model BomMaster {
+  id        String     @id @default(cuid())
+  code      String     @unique
+  name      String
+  skuId     String
+  sku       ProductSku @relation(fields: [skuId], references: [id])
+  status    String     @default("启用")
+  note      String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  versions BomVersion[]
+}
+
+model BomVersion {
+  id            String    @id @default(cuid())
+  bomId         String
+  bom           BomMaster @relation(fields: [bomId], references: [id])
+  version       String
+  status        String    @default("草稿")
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+  releasedAt    DateTime?
+  releasedBy    String?
+  changeReason  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  items                 BomItem[]
+  workOrders            WorkOrder[]
+  workOrderRequirements WorkOrderMaterialRequirement[]
+
+  @@unique([bomId, version])
+}
+
+model BomItem {
+  id                String         @id @default(cuid())
+  bomVersionId      String
+  bomVersion        BomVersion     @relation(fields: [bomVersionId], references: [id])
+  materialId        String
+  material          MaterialMaster @relation(fields: [materialId], references: [id])
+  operationSequence Int?
+  operationCode     String?
+  qtyPerBasis       Float
+  basisQty          Float          @default(1000)
+  unit              String
+  lossRate          Float          @default(0)
+  itemType          String         @default("主料")
+  status            String         @default("启用")
+  note              String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  substitutes           BomSubstitute[]
+  workOrderRequirements WorkOrderMaterialRequirement[]
+
+  @@index([bomVersionId, operationSequence])
+  @@index([materialId])
+}
+
+model BomSubstitute {
+  id             String         @id @default(cuid())
+  bomItemId      String
+  bomItem        BomItem        @relation(fields: [bomItemId], references: [id])
+  materialId     String
+  material       MaterialMaster @relation(fields: [materialId], references: [id])
+  priority       Int            @default(1)
+  conversionRate Float          @default(1)
+  status         String         @default("启用")
+  effectiveFrom  DateTime?
+  effectiveTo    DateTime?
+  reason         String?
+  note           String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@unique([bomItemId, materialId])
+}
+
 model ProcessRouteVersion {
   id            String       @id @default(cuid())
   routeId       String
@@ -202,6 +285,8 @@ model WorkOrder {
   planMoldId      String?
   planMold        MoldMaster?          @relation(fields: [planMoldId], references: [id])
   bomVersion      String?
+  bomVersionId    String?
+  bomDefinition   BomVersion?          @relation(fields: [bomVersionId], references: [id])
   route           String?
   routeVersionId  String?
   routeVersion    ProcessRouteVersion? @relation(fields: [routeVersionId], references: [id])
@@ -210,10 +295,43 @@ model WorkOrder {
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
-  batches         ProductionBatch[]
-  operations      WorkOrderOperation[]
-  materialIssues  MaterialIssue[]
-  materialReturns MaterialReturn[]
+  batches              ProductionBatch[]
+  operations           WorkOrderOperation[]
+  materialIssues       MaterialIssue[]
+  materialReturns      MaterialReturn[]
+  materialRequirements WorkOrderMaterialRequirement[]
+}
+
+model WorkOrderMaterialRequirement {
+  id                String          @id @default(cuid())
+  workOrderId       String
+  workOrder         WorkOrder       @relation(fields: [workOrderId], references: [id])
+  bomVersionId      String?
+  bomVersion        BomVersion?     @relation(fields: [bomVersionId], references: [id])
+  bomItemId         String?
+  bomItem           BomItem?        @relation(fields: [bomItemId], references: [id])
+  materialId        String?
+  material          MaterialMaster? @relation(fields: [materialId], references: [id])
+  materialCode      String
+  materialName      String
+  operationSequence Int?
+  operationCode     String?
+  operationName     String?
+  standardQty       Float
+  requiredQty       Float
+  issuedQty         Float           @default(0)
+  consumedQty       Float           @default(0)
+  unit              String
+  lossRate          Float           @default(0)
+  itemType          String          @default("主料")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  batchConsumptions BatchMaterialConsumption[]
+
+  @@index([workOrderId, operationSequence])
+  @@index([bomVersionId])
+  @@index([materialId])
 }
 
 model WorkOrderOperation {
@@ -351,17 +469,20 @@ model ProductionBatch {
 }
 
 model BatchMaterialConsumption {
-  id              String           @id @default(cuid())
-  batchId         String
-  batch           ProductionBatch  @relation("ConsumingBatch", fields: [batchId], references: [id])
-  materialLotId   String?
-  materialLot     MaterialLot?     @relation(fields: [materialLotId], references: [id])
-  sourceBatchId   String?
-  sourceBatch     ProductionBatch? @relation("SourceBatchConsumption", fields: [sourceBatchId], references: [id])
-  qty             Float
-  unit            String
-  consumptionType String           @default("主料")
-  createdAt       DateTime         @default(now())
+  id                             String                        @id @default(cuid())
+  batchId                        String
+  batch                          ProductionBatch               @relation("ConsumingBatch", fields: [batchId], references: [id])
+  materialLotId                  String?
+  materialLot                    MaterialLot?                  @relation(fields: [materialLotId], references: [id])
+  sourceBatchId                  String?
+  sourceBatch                    ProductionBatch?              @relation("SourceBatchConsumption", fields: [sourceBatchId], references: [id])
+  workOrderMaterialRequirementId String?
+  workOrderMaterialRequirement   WorkOrderMaterialRequirement? @relation(fields: [workOrderMaterialRequirementId], references: [id])
+  isSubstitute                   Boolean                       @default(false)
+  qty                            Float
+  unit                           String
+  consumptionType                String                        @default("主料")
+  createdAt                      DateTime                      @default(now())
 }
 
 model BatchGenealogy {

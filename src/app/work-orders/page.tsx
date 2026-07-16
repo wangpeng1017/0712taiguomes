@@ -25,6 +25,21 @@ export default async function WorkOrdersPage() {
     completionRate: wo.completionRate,
     batchCount: wo.batchCount,
     bomVersion: wo.bomVersion,
+    bomVersionId: wo.bomVersionId,
+    bomDefinition: wo.bomDefinition ? { id: wo.bomDefinition.id, version: wo.bomDefinition.version, bom: { code: wo.bomDefinition.bom.code, name: wo.bomDefinition.bom.name } } : null,
+    materialRequirements: wo.materialRequirements.map((requirement) => ({
+      id: requirement.id,
+      materialCode: requirement.materialCode,
+      materialName: requirement.materialName,
+      operationSequence: requirement.operationSequence,
+      operationCode: requirement.operationCode,
+      operationName: requirement.operationName,
+      standardQty: requirement.standardQty,
+      requiredQty: requirement.requiredQty,
+      issuedQty: requirement.issuedQty,
+      consumedQty: requirement.consumedQty,
+      unit: requirement.unit,
+    })),
     route: wo.route,
     routeVersion: wo.routeVersion ? {
       id: wo.routeVersion.id,
@@ -69,6 +84,7 @@ export default async function WorkOrdersPage() {
           isFinal: operation.isFinal,
         })),
       }))}
+      bomVersions={options.bomVersions.map((version) => ({ id: version.id, version: version.version, bom: { code: version.bom.code, name: version.bom.name, skuId: version.bom.skuId }, items: version.items.map((item) => ({ id: item.id })) }))}
     />
   );
 }

@@ -40,6 +40,37 @@ export function workOrderCompletionRate(finalOperationGoodQty: number, planQty: 
   return finalOperationGoodQty / planQty;
 }
 
+export function requiredMaterialQty(input: {
+  productionQty: number;
+  quantityPerBasis: number;
+  basisQty: number;
+  lossRate?: number;
+}): number {
+  if (input.productionQty <= 0 || input.quantityPerBasis < 0 || input.basisQty <= 0) return 0;
+  const lossRate = Math.max(input.lossRate ?? 0, 0);
+  return (input.productionQty / input.basisQty) * input.quantityPerBasis * (1 + lossRate);
+}
+
+export function materialConsumptionVariance(actualQty: number, standardQty: number): {
+  varianceQty: number;
+  varianceRate: number | null;
+} {
+  const varianceQty = actualQty - standardQty;
+  return {
+    varianceQty,
+    varianceRate: standardQty > 0 ? varianceQty / standardQty : null,
+  };
+}
+
+export function isMaterialWithinTolerance(input: {
+  actualQty: number;
+  standardQty: number;
+  upperToleranceRate: number;
+}): boolean {
+  if (input.standardQty <= 0) return input.actualQty <= 0;
+  return input.actualQty <= input.standardQty * (1 + Math.max(input.upperToleranceRate, 0));
+}
+
 export function defectRate(badQty: number, total: number): number {
   return total > 0 ? badQty / total : 0;
 }

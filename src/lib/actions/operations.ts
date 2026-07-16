@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { generateBatchNo } from "@/lib/batch-no";
 import { MOLD_BLOCKED_STATUS } from "@/lib/constants";
+import { equivalentBomConsumption, validateFrozenBomConsumption } from "@/lib/bom-workflow";
 import { assertBatchCanBeVoided, assertOperationTransition, isFinalOperationComplete } from "@/lib/operation-workflow";
 import { evaluateMoldAlert, thisMoldCount, totalQty } from "@/lib/production-calc";
 
@@ -11,6 +12,7 @@ export type OperationMaterialInput = {
   materialLotId: string;
   qty: number;
   consumptionType?: string;
+  requirementId?: string;
 };
 
 export type OperationSourceBatchInput = {
@@ -55,7 +57,10 @@ export async function submitOperationReport(input: SubmitOperationReportInput): 
   const operation = await prisma.workOrderOperation.findUniqueOrThrow({
     where: { id: input.workOrderOperationId },
     include: {
-      workOrder: { include: { sku: true } },
+      workOrder: { include: {
+        sku: true,
+        materialRequirements: { include: { bomItem: { include: { substitutes: true } } } },
+      } },
       planEquipment: true,
       planMold: true,
     },
@@ -129,14 +134,69 @@ export async function submitOperationReport(input: SubmitOperationReportInput): 
     ? await prisma.materialLot.findMany({ where: { id: { in: materialInputs.map((item) => item.materialLotId) } }, include: { material: true } })
     : [];
   if (lots.length !== new Set(materialInputs.map((item) => item.materialLotId)).size) return { ok: false, error: "包含无效的物料批次" };
-  for (const materialInput of materialInputs) {
+  const hasFrozenBom = !!operation.workOrder.bomVersionId;
+  const applicableRequirements = operation.workOrder.materialRequirements.filter((requirement) =>
+    requirement.operationSequence === operation.sequence || (requirement.operationSequence == null && !previousOperation)
+  );
+  if (applicableRequirements.length > 0 && materialInputs.length === 0) {
+    return { ok: false, error: "当前工序存在冻结 BOM 用料要求，必须登记物料投入" };
+  }
+  const resolvedRequirements: Array<{
+    requirementId: string;
+    materialName: string;
+    requiredQty: number;
+    isSubstitute: boolean;
+    conversionRate: number;
+  } | undefined> = [];
+  for (const [materialIndex, materialInput] of materialInputs.entries()) {
     if (!Number.isFinite(materialInput.qty) || materialInput.qty <= 0) return { ok: false, error: "物料投入数量必须大于 0" };
     const lot = lots.find((item) => item.id === materialInput.materialLotId)!;
     if (!["合格", "让步接收"].includes(lot.inspectStatus) || lot.stockStatus !== "可用") return { ok: false, error: `物料批次 ${lot.lotNo} 当前不可用` };
     if (materialInput.qty > lot.remainingQty) return { ok: false, error: `物料批次 ${lot.lotNo} 可用库存不足` };
+    if (hasFrozenBom) {
+      if (!materialInput.requirementId) return { ok: false, error: `物料批次 ${lot.lotNo} 必须选择对应的工单用料要求` };
+      const requirement = applicableRequirements.find((item) => item.id === materialInput.requirementId);
+      if (!requirement) return { ok: false, error: `物料批次 ${lot.lotNo} 不属于当前工序的冻结 BOM 要求` };
+      const isPrimary = requirement.materialId === lot.materialId;
+      const now = startTime;
+      const substitute = requirement.bomItem?.substitutes.find((item) => item.materialId === lot.materialId
+        && item.status === "启用" && (!item.effectiveFrom || item.effectiveFrom <= now) && (!item.effectiveTo || item.effectiveTo >= now));
+      if (!isPrimary && !substitute) return { ok: false, error: `物料 ${lot.material.name} 既非 BOM 标准料，也非当前有效替代料` };
+      resolvedRequirements[materialIndex] = {
+        requirementId: requirement.id,
+        materialName: requirement.materialName,
+        requiredQty: requirement.requiredQty,
+        isSubstitute: !isPrimary,
+        conversionRate: isPrimary ? 1 : substitute!.conversionRate,
+      };
+    }
   }
   if ((input.returnWeight ?? 0) < 0) return { ok: false, error: "退料数量不可为负数" };
   if ((input.returnWeight ?? 0) > (materialInputs[0]?.qty ?? 0)) return { ok: false, error: "退料数量不可超过首个物料批次的领用数量" };
+  const issuedByLot = new Map<string, number>();
+  for (const materialInput of materialInputs) {
+    issuedByLot.set(materialInput.materialLotId, (issuedByLot.get(materialInput.materialLotId) ?? 0) + materialInput.qty);
+  }
+  for (const [materialLotId, issuedQty] of issuedByLot) {
+    const lot = lots.find((item) => item.id === materialLotId)!;
+    if (issuedQty > lot.remainingQty) return { ok: false, error: `物料批次 ${lot.lotNo} 累计投入数量超过可用库存` };
+  }
+  try {
+    validateFrozenBomConsumption(
+      applicableRequirements,
+      materialInputs.flatMap((materialInput, materialIndex) => {
+        const resolved = resolvedRequirements[materialIndex];
+        if (!resolved) return [];
+        const actualConsumedQty = materialInput.qty - (materialIndex === 0 ? (input.returnWeight ?? 0) : 0);
+        return [{
+          requirementId: resolved.requirementId,
+          equivalentQty: equivalentBomConsumption(actualConsumedQty, resolved.conversionRate),
+        }];
+      }),
+    );
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "BOM 用料校验失败" };
+  }
 
   const [equipment, mold] = await Promise.all([
     input.equipmentId ? prisma.equipmentMaster.findUniqueOrThrow({ where: { id: input.equipmentId } }) : null,
@@ -205,13 +265,32 @@ export async function submitOperationReport(input: SubmitOperationReportInput): 
     for (const [materialIndex, materialInput] of materialInputs.entries()) {
       const lot = lots.find((item) => item.id === materialInput.materialLotId)!;
       const consumedQty = materialInput.qty - (materialIndex === 0 ? (input.returnWeight ?? 0) : 0);
+      const resolved = resolvedRequirements[materialIndex];
+      const equivalentConsumedQty = resolved
+        ? equivalentBomConsumption(consumedQty, resolved.conversionRate)
+        : consumedQty;
       await tx.batchMaterialConsumption.create({
-        data: { batchId: batch.id, materialLotId: lot.id, qty: consumedQty, unit: lot.unit, consumptionType: materialInput.consumptionType ?? "主料" },
+        data: {
+          batchId: batch.id, materialLotId: lot.id, qty: consumedQty, unit: lot.unit,
+          consumptionType: materialInput.consumptionType ?? "主料",
+          workOrderMaterialRequirementId: resolved?.requirementId ?? null,
+          isSubstitute: resolved?.isSubstitute ?? false,
+        },
       });
       await tx.materialIssue.create({
         data: { workOrderId: operation.workOrderId, materialLotId: lot.id, qty: materialInput.qty, issuedBy: input.operator.trim(), issuedAt: startTime, equipmentId: equipment?.id ?? null, note: `工序 ${operation.operationCode}` },
       });
       await tx.materialLot.update({ where: { id: lot.id }, data: { remainingQty: { decrement: consumedQty } } });
+      if (resolved) {
+        const updated = await tx.workOrderMaterialRequirement.updateMany({
+          where: {
+            id: resolved.requirementId,
+            consumedQty: { lte: resolved.requiredQty - equivalentConsumedQty + 1e-9 },
+          },
+          data: { issuedQty: { increment: materialInput.qty }, consumedQty: { increment: equivalentConsumedQty } },
+        });
+        if (updated.count !== 1) throw new Error(`物料 ${resolved.materialName} 累计等效消耗不可超过需求数量 ${resolved.requiredQty}`);
+      }
     }
     if ((input.returnWeight ?? 0) > 0 && materialInputs[0]) {
       await tx.materialReturn.create({
@@ -388,7 +467,13 @@ export async function voidOperationBatch(batchId: string, reason: string) {
       stockIns: true,
       genealogySources: true,
       sourceReworkOrders: { where: { status: { in: ["待处理", "处理中"] } } },
-      materialConsumptions: true,
+      materialConsumptions: {
+        include: {
+          materialLot: true,
+          workOrderMaterialRequirement: { include: { bomItem: { include: { substitutes: true } } } },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      },
       genealogyTargets: { include: { sourceBatch: true } },
       qualityResults: true,
       workOrderOperation: true,
@@ -401,6 +486,7 @@ export async function voidOperationBatch(batchId: string, reason: string) {
     activeReworkCount: batch.sourceReworkOrders.length,
   });
   if (batch.status === "已作废") throw new Error("该批次已经作废");
+  const returnedConsumptionId = batch.materialConsumptions.find((consumption) => consumption.materialLotId === batch.materialLotId)?.id;
 
   await prisma.$transaction(async (tx) => {
     for (const consumption of batch.materialConsumptions) {
@@ -414,6 +500,18 @@ export async function voidOperationBatch(batchId: string, reason: string) {
             where: { workOrderId: batch.workOrderId, materialLotId: consumption.materialLotId, returnedAt: batch.endTime },
           });
         }
+      }
+      if (consumption.workOrderMaterialRequirementId) {
+        const substitute = consumption.isSubstitute
+          ? consumption.workOrderMaterialRequirement?.bomItem?.substitutes.find((item) => item.materialId === consumption.materialLot?.materialId)
+          : null;
+        const equivalentConsumedQty = equivalentBomConsumption(consumption.qty, substitute?.conversionRate ?? 1);
+        const issuedQty = consumption.qty
+          + (consumption.id === returnedConsumptionId ? (batch.returnWeight ?? 0) : 0);
+        await tx.workOrderMaterialRequirement.update({
+          where: { id: consumption.workOrderMaterialRequirementId },
+          data: { consumedQty: { decrement: equivalentConsumedQty }, issuedQty: { decrement: issuedQty } },
+        });
       }
     }
     for (const edge of batch.genealogyTargets) {

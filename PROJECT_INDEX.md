@@ -28,9 +28,11 @@
 ```mermaid
 flowchart LR
     A[原材料入库<br/>MaterialLot] --> B[工单创建/下达<br/>WorkOrder]
+    B --> BOM[冻结 BOM 版本与工单用料要求<br/>WorkOrderMaterialRequirement]
     B --> R[冻结路线版本<br/>ProcessRouteVersion]
     R --> O[生成工序任务<br/>WorkOrderOperation]
     A --> C[物料投入<br/>BatchMaterialConsumption]
+    BOM --> C
     O --> D[工序开工<br/>设备/模具/上游批次]
     C --> D
     D --> E[工序报工<br/>ProductionBatch<br/>良品/不良]
@@ -97,7 +99,7 @@ docs/                        # PRD.md / SHIP-PROFILE.md / _INDEX.md
 | 业务域 | 页面 | 核心数据模型 | 说明 |
 |--------|------|--------------|------|
 | 仪表盘 | `dashboard` | 聚合 ProductionBatch/DefectRecord/MoldMaster | 只读，无独立表 |
-| 工单 | `work-orders` | WorkOrder | 状态机：未下达→已下达→生产中→暂停/已完工→已关闭 |
+| 工单 | `work-orders` | WorkOrder / BomVersion / WorkOrderMaterialRequirement | 状态机：未下达→已下达→生产中→暂停/已完工→已关闭；下达时冻结 BOM 用料快照 |
 | 注塑报工 | `injection` | ProductionBatch(type=注塑) | 批次列表首页 + 抽屉新增报工 + 详情/作废 |
 | 冲压报工 | `stamping` | ProductionBatch(type=冲压) | 批次列表首页 + 抽屉新增报工 + 详情/作废 |
 | 物料批次 | `materials` | MaterialLot/MaterialIssue/MaterialReturn/StockInRecord | 4 个 tab |

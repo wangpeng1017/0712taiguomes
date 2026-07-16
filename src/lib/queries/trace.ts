@@ -15,6 +15,20 @@ export type TraceMaterialConsumption = {
   consumptionType: string;
 };
 
+export type TraceMaterialRequirement = {
+  id: string;
+  materialCode: string;
+  materialName: string;
+  operationSequence: number | null;
+  operationCode: string | null;
+  operationName: string | null;
+  standardQty: number;
+  requiredQty: number;
+  issuedQty: number;
+  consumedQty: number;
+  unit: string;
+};
+
 export type TraceQualityResult = {
   id: string;
   result: string;
@@ -107,7 +121,12 @@ export async function getTraceData() {
   const [batches, materialLots, molds, processRoutes, routeVersions, routeOperations, workOrderOperations, consumptions, genealogy, qualityResults, reworkOrders] = await Promise.all([
     prisma.productionBatch.findMany({
       include: {
-        workOrder: true,
+        workOrder: {
+          include: {
+            bomDefinition: { include: { bom: true } },
+            materialRequirements: { orderBy: [{ operationSequence: "asc" }, { materialCode: "asc" }] },
+          },
+        },
         sku: true,
         equipment: true,
         mold: true,
@@ -294,6 +313,24 @@ export async function getTraceData() {
         leaderConfirmedBy: batch.leaderConfirmedBy,
         leaderConfirmedAt: batch.leaderConfirmedAt?.toISOString() ?? null,
         workOrder: { no: batch.workOrder.no, planQty: batch.workOrder.planQty },
+        bomVersion: batch.workOrder.bomDefinition ? {
+          code: batch.workOrder.bomDefinition.bom.code,
+          name: batch.workOrder.bomDefinition.bom.name,
+          version: batch.workOrder.bomDefinition.version,
+        } : null,
+        materialRequirements: batch.workOrder.materialRequirements.map((requirement) => ({
+          id: requirement.id,
+          materialCode: requirement.materialCode,
+          materialName: requirement.materialName,
+          operationSequence: requirement.operationSequence,
+          operationCode: requirement.operationCode,
+          operationName: requirement.operationName,
+          standardQty: requirement.standardQty,
+          requiredQty: requirement.requiredQty,
+          issuedQty: requirement.issuedQty,
+          consumedQty: requirement.consumedQty,
+          unit: requirement.unit,
+        })),
         sku: { name: batch.sku.name, code: batch.sku.code },
         equipment: batch.equipment ? { code: batch.equipment.code, name: batch.equipment.name } : null,
         mold: batch.mold ? { code: batch.mold.code, name: batch.mold.name } : null,

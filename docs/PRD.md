@@ -64,8 +64,11 @@
 | F010 | 工艺管理 | 工序主数据/工艺路线/版本复制发布停用/路线工序配置 | 🟢 | P0 | `src/app/process` |
 | F011 | 工序执行 | 工单下达锁版/工序任务/前后序控制/工序报工/WIP拆合批 | 🟢 | P0 | `src/app/operations` |
 | F012 | 过程质量 | 工序检验放行/质量冻结/返工任务/返工批次谱系 | 🟢 | P0 | `src/app/quality` |
+| F013 | BOM管理 | BOM版本发布/工单用料冻结/标准料与替代料校验/标准实际耗用 | 🟡 | P0 | `src/app/process/boms` |
 
 > 🟢 已完成 = 本地开发环境（SQLite）功能实现 + 核心规则自动化测试 + tsc/lint/build 全绿，并已部署到阿里云 MySQL 测试环境。测试地址：`http://8.130.182.148/taiguo-mes/dashboard`。公网 HTTP、静态资源、PM2 日志和数据库一致性验证已通过；受浏览器自动化连接限制，本轮未执行真实页面表单提交。
+
+> F013 受控 BOM 已完成本地 SQLite 开发、隔离数据库冒烟和构建验证；测试环境部署需在本轮确认后执行。
 
 P1（条码/扫码/Excel导入导出/日报确认锁定）、P2（泰文界面/PDF报表/看板大屏/手机端/设备采集/ERP-WMS接口）见 SPEC §17，一期 Demo 不实现，字段预留。中文/英文界面切换已提前实现，泰文仍属于后续范围。
 
@@ -145,6 +148,17 @@ P1（条码/扫码/Excel导入导出/日报确认锁定）、P2（泰文界面/P
   - [x] 返工任务关联原批次、返工工序、路线版本、合格/报废数量及结果批次
   - [x] 返工产出与原不良批次建立返工谱系，不覆盖原始生产履历
 
+### F013: 受控 BOM 与工单用料冻结
+
+- [x] BOM 主档、BOM 版本和 BOM 明细支持按产品 SKU 建档，版本发布后受控使用
+- [x] 工单可选择已发布 BOM 版本；工单下达时复制生成 `WorkOrderMaterialRequirement` 快照
+- [x] 快照保存工序、物料编码/名称、标准耗用、计划需求量、损耗率和标准单位；历史工单不随 BOM 修改而变化
+- [x] 有 BOM 的工序报工必须指定冻结用料要求；投入物料批次必须是标准料或有效期内启用的替代料
+- [x] `BatchMaterialConsumption` 保存用料要求 ID 和是否替代料，并累计实际领用/耗用；报工作废时回滚
+- [x] 无 `bomVersionId` 的历史工单继续走原有物料投入逻辑，保证存量数据兼容
+
+受控 BOM 的业务边界：BOM 负责“应该用什么料、标准用多少”，工艺路线负责“在哪道工序使用”，工序报工负责“实际用了哪个批次、多少数量”。三者通过工单下达时的快照关联，不能用当前主数据反推历史事实。
+
 ### 通用 CRUD 与审计规则
 
 - 主数据：支持新增、编辑、启停；未被业务引用的数据可硬删除，已引用数据必须停用
@@ -179,6 +193,8 @@ P1（条码/扫码/Excel导入导出/日报确认锁定）、P2（泰文界面/P
 | 实体 | 说明 |
 |------|------|
 | ProductSku / MaterialMaster / EquipmentMaster / MoldMaster | 主数据 |
+| BomMaster / BomVersion / BomItem / BomSubstitute | 受控 BOM、版本明细及替代料 |
+| WorkOrderMaterialRequirement | 工单下达时冻结的标准用料与实际领耗汇总 |
 | OperationMaster / ProcessRoute / ProcessRouteVersion / RouteOperation | 工序与受控工艺路线版本主数据 |
 | WorkOrder | 工单，锁定 ProcessRouteVersion，1:N WorkOrderOperation |
 | WorkOrderOperation | 工单下达时生成的工序任务快照和投入产出汇总 |

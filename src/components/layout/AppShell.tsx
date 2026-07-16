@@ -64,6 +64,7 @@ const MAIN_NAV_ITEMS: NavigationItem[] = [
     label: "工艺管理",
     icon: <BranchesOutlined />,
     children: [
+      { key: "/process/boms", label: "BOM 管理" },
       { key: "/process/operations", label: "工序管理" },
       { key: "/process/routes", label: "工艺路线" },
       { key: "/process/versions", label: "路线版本 / 工序配置" },

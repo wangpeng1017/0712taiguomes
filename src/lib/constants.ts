@@ -39,6 +39,11 @@ export const BATCH_CONSUMPTION_TYPES = ["主料", "辅料", "半成品", "返工
 export const BATCH_GENEALOGY_TYPES = ["转序", "合批", "拆批", "返工"] as const;
 export const REWORK_STATUS = ["待处理", "处理中", "已完成", "已关闭"] as const;
 
+export const BOM_STATUS = ["启用", "停用"] as const;
+export const BOM_VERSION_STATUS = ["草稿", "审核中", "已发布", "已停用"] as const;
+export const BOM_ITEM_TYPES = ["主料", "辅料", "包装料", "其他"] as const;
+export const BOM_SUBSTITUTE_STATUS = ["启用", "停用"] as const;
+
 export const DEFECT_RESPONSIBLE = ["原材料", "设备", "模具", "工艺", "操作", "其他"] as const;
 export const DEFECT_ACTION = ["返工", "报废", "隔离", "让步接收"] as const;
 

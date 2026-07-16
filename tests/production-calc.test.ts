@@ -7,8 +7,11 @@ import {
   evaluateMoldAlert,
   firstPassYield,
   isOperationQuantityClosed,
+  isMaterialWithinTolerance,
+  materialConsumptionVariance,
   materialUtilization,
   operationQuantityVariance,
+  requiredMaterialQty,
   thisMoldCount,
   totalQty,
   workOrderCompletionRate,
@@ -56,4 +59,14 @@ test("operation quantity balance covers good, scrap, rework and WIP outputs", ()
   assert.equal(operationQuantityVariance(balance), 0);
   assert.equal(isOperationQuantityClosed(balance), true);
   assert.equal(isOperationQuantityClosed({ ...balance, goodTransferQty: 959 }), false);
+});
+
+test("controlled BOM calculates standard requirement and consumption variance", () => {
+  assert.equal(requiredMaterialQty({ productionQty: 1000, quantityPerBasis: 8, basisQty: 1000 }), 8);
+  assert.equal(requiredMaterialQty({ productionQty: 1000, quantityPerBasis: 8, basisQty: 1000, lossRate: 0.05 }), 8.4);
+  const variance = materialConsumptionVariance(8.8, 8);
+  assert.ok(Math.abs(variance.varianceQty - 0.8) < 1e-9);
+  assert.ok(variance.varianceRate !== null && Math.abs(variance.varianceRate - 0.1) < 1e-9);
+  assert.equal(isMaterialWithinTolerance({ actualQty: 8.4, standardQty: 8, upperToleranceRate: 0.05 }), true);
+  assert.equal(isMaterialWithinTolerance({ actualQty: 8.41, standardQty: 8, upperToleranceRate: 0.05 }), false);
 });

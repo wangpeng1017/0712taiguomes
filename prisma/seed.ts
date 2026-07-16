@@ -28,6 +28,7 @@ async function main() {
   await prisma.operationQualityResult.deleteMany();
   await prisma.batchGenealogy.deleteMany();
   await prisma.batchMaterialConsumption.deleteMany();
+  await prisma.workOrderMaterialRequirement.deleteMany();
   await prisma.reworkOrder.deleteMany();
   await prisma.stockInRecord.deleteMany();
   await prisma.defectRecord.deleteMany();
@@ -37,6 +38,10 @@ async function main() {
   await prisma.moldMaintenanceRecord.deleteMany();
   await prisma.workOrderOperation.deleteMany();
   await prisma.workOrder.deleteMany();
+  await prisma.bomSubstitute.deleteMany();
+  await prisma.bomItem.deleteMany();
+  await prisma.bomVersion.deleteMany();
+  await prisma.bomMaster.deleteMany();
   await prisma.routeOperation.deleteMany();
   await prisma.processRouteVersion.deleteMany();
   await prisma.processRoute.deleteMany();
@@ -113,7 +118,7 @@ async function main() {
       shelfLife: "开封后6个月", color: "本色", dryingRequirement: "100℃ / 4小时",
     },
   });
-  await prisma.materialMaster.create({
+  const matPA6 = await prisma.materialMaster.create({
     data: {
       code: "MAT-PA6-BLK", name: "PA6(黑色) 颗粒", type: "塑料颗粒",
       materialGrade: "PA6-BK", supplier: "Thai Poly Compound", unit: "KG",
@@ -134,7 +139,7 @@ async function main() {
       thickness: 0.3, width: 150, coilWeight: 1200, surfaceTreatment: "2B",
     },
   });
-  await prisma.materialMaster.create({
+  const matAL = await prisma.materialMaster.create({
     data: {
       code: "MAT-AL505210", name: "铝合金5052卷材 1.0mm", type: "金属卷材",
       materialGrade: "AL5052", supplier: "Thai Aluminum Co.", unit: "KG",
@@ -287,6 +292,54 @@ async function main() {
     defaultRouteVersions.set(sku.id, created.routeVersion.id);
   }
 
+  // ---------- 受控 BOM / 配方 ----------
+  type BomSeed = {
+    sku: typeof skuInj1;
+    material: typeof matPA66;
+    operationCode: string;
+    qtyPerBasis: number;
+    lossRate: number;
+  };
+  const bomBySku = new Map<string, { versionId: string; itemId: string }>();
+  const bomSeeds: BomSeed[] = [
+    { sku: skuInj1, material: matPA66, operationCode: "OP-DRY", qtyPerBasis: 42.5, lossRate: 0.03 },
+    { sku: skuInj2, material: matPBT, operationCode: "OP-INJ", qtyPerBasis: 18.2, lossRate: 0.03 },
+    { sku: skuInj3, material: matPA6, operationCode: "OP-INJ", qtyPerBasis: 8.7, lossRate: 0.03 },
+    { sku: skuStp1, material: matSPCC, operationCode: "OP-FEED", qtyPerBasis: 65, lossRate: 0.12 },
+    { sku: skuStp2, material: matSUS, operationCode: "OP-STP", qtyPerBasis: 12, lossRate: 0.08 },
+    { sku: skuStp3, material: matAL, operationCode: "OP-STP", qtyPerBasis: 28, lossRate: 0.1 },
+  ];
+  for (const spec of bomSeeds) {
+    const bom = await prisma.bomMaster.create({
+      data: { code: `BOM-${spec.sku.code}`, name: `${spec.sku.name}标准BOM`, skuId: spec.sku.id },
+    });
+    const version = await prisma.bomVersion.create({
+      data: {
+        bomId: bom.id,
+        version: "V1.0",
+        status: "已发布",
+        effectiveFrom: D10,
+        releasedAt: at(D10, 8, 0),
+        releasedBy: "工艺主管",
+        changeReason: "建立一期受控BOM基线",
+      },
+    });
+    const item = await prisma.bomItem.create({
+      data: {
+        bomVersionId: version.id,
+        materialId: spec.material.id,
+        operationSequence: 10,
+        operationCode: spec.operationCode,
+        qtyPerBasis: spec.qtyPerBasis,
+        basisQty: 1000,
+        unit: spec.material.unit,
+        lossRate: spec.lossRate,
+        itemType: "主料",
+      },
+    });
+    bomBySku.set(spec.sku.id, { versionId: version.id, itemId: item.id });
+  }
+
   // ---------- 物料批次入库 ----------
   const lotPA66 = await prisma.materialLot.create({
     data: {
@@ -378,44 +431,80 @@ async function main() {
     data: {
       no: "WO-20260712-001", skuId: skuInj1.id, type: "注塑", planQty: 5000,
       planStart: D10, planEnd: D14, planEquipmentId: eqInj01.id, planMoldId: mldInj1.id,
-      bomVersion: "V1.0", route: "标准注塑工艺", routeVersionId: injRouteV1.routeVersion.id, status: "生产中",
+      bomVersion: "V1.0", bomVersionId: bomBySku.get(skuInj1.id)!.versionId,
+      route: "标准注塑工艺", routeVersionId: injRouteV1.routeVersion.id, status: "生产中",
     },
   });
   const wo2 = await prisma.workOrder.create({
     data: {
       no: "WO-20260712-002", skuId: skuStp1.id, type: "冲压", planQty: 8000,
       planStart: D10, planEnd: D15, planEquipmentId: eqStp02.id, planMoldId: mldStp1.id,
-      bomVersion: "V1.0", route: "标准冲压工艺", routeVersionId: stpRouteV1.routeVersion.id, status: "生产中",
+      bomVersion: "V1.0", bomVersionId: bomBySku.get(skuStp1.id)!.versionId,
+      route: "标准冲压工艺", routeVersionId: stpRouteV1.routeVersion.id, status: "生产中",
     },
   });
   const wo3 = await prisma.workOrder.create({
     data: {
       no: "WO-20260712-003", skuId: skuInj2.id, type: "注塑", planQty: 3000,
       planStart: D11, planEnd: D13, planEquipmentId: eqInj02.id, planMoldId: mldInj2.id,
-      bomVersion: "V1.0", route: "标准注塑工艺", routeVersionId: defaultRouteVersions.get(skuInj2.id), status: "已下达",
+      bomVersion: "V1.0", bomVersionId: bomBySku.get(skuInj2.id)!.versionId,
+      route: "标准注塑工艺", routeVersionId: defaultRouteVersions.get(skuInj2.id), status: "已下达",
     },
   });
   const wo4 = await prisma.workOrder.create({
     data: {
       no: "WO-20260712-004", skuId: skuStp2.id, type: "冲压", planQty: 6000,
       planStart: D11, planEnd: D14, planEquipmentId: eqStp01.id, planMoldId: mldStp2.id,
-      bomVersion: "V1.0", route: "标准冲压工艺", routeVersionId: defaultRouteVersions.get(skuStp2.id), status: "生产中",
+      bomVersion: "V1.0", bomVersionId: bomBySku.get(skuStp2.id)!.versionId,
+      route: "标准冲压工艺", routeVersionId: defaultRouteVersions.get(skuStp2.id), status: "生产中",
     },
   });
   const wo5 = await prisma.workOrder.create({
     data: {
       no: "WO-20260712-005", skuId: skuInj3.id, type: "注塑", planQty: 2000,
       planStart: D13, planEnd: D15, planEquipmentId: eqInj01.id, planMoldId: mldInj3.id,
-      bomVersion: "V1.0", route: "标准注塑工艺", routeVersionId: defaultRouteVersions.get(skuInj3.id), status: "未下达",
+      bomVersion: "V1.0", bomVersionId: bomBySku.get(skuInj3.id)!.versionId,
+      route: "标准注塑工艺", routeVersionId: defaultRouteVersions.get(skuInj3.id), status: "未下达",
     },
   });
   const wo6 = await prisma.workOrder.create({
     data: {
       no: "WO-20260712-006", skuId: skuStp3.id, type: "冲压", planQty: 1500,
-      planStart: D14, planEnd: D16, planEquipmentId: eqStp02.id, routeVersionId: defaultRouteVersions.get(skuStp3.id), status: "已下达",
+      planStart: D14, planEnd: D16, planEquipmentId: eqStp02.id,
+      bomVersion: "V1.0", bomVersionId: bomBySku.get(skuStp3.id)!.versionId,
+      routeVersionId: defaultRouteVersions.get(skuStp3.id), status: "已下达",
       note: "计划模具 MLD-STP-003 当前维修中，下达时需知晓",
     },
   });
+
+  const materialRequirementByWorkOrder = new Map<string, string>();
+  for (const workOrder of [wo1, wo2, wo3, wo4, wo5, wo6]) {
+    const controlledBom = bomBySku.get(workOrder.skuId)!;
+    const item = await prisma.bomItem.findUniqueOrThrow({
+      where: { id: controlledBom.itemId },
+      include: { material: true },
+    });
+    const standardQty = (item.qtyPerBasis * workOrder.planQty) / item.basisQty;
+    const requirement = await prisma.workOrderMaterialRequirement.create({
+      data: {
+        workOrderId: workOrder.id,
+        bomVersionId: controlledBom.versionId,
+        bomItemId: item.id,
+        materialId: item.materialId,
+        materialCode: item.material.code,
+        materialName: item.material.name,
+        operationSequence: item.operationSequence,
+        operationCode: item.operationCode,
+        operationName: item.operationCode ? operations.get(item.operationCode)?.name : null,
+        standardQty,
+        requiredQty: standardQty * (1 + item.lossRate),
+        unit: item.unit,
+        lossRate: item.lossRate,
+        itemType: item.itemType,
+      },
+    });
+    materialRequirementByWorkOrder.set(workOrder.id, requirement.id);
+  }
 
   const productionOperationByWorkOrder = new Map<string, string>();
   for (const workOrder of [wo1, wo2, wo3, wo4, wo5, wo6]) {
@@ -543,11 +632,23 @@ async function main() {
       data: {
         batchId: batch.id,
         materialLotId: s.materialLotId,
+        workOrderMaterialRequirementId: materialRequirementByWorkOrder.get(s.workOrderId),
+        isSubstitute: false,
         qty: s.issuedWeight - s.returnWeight,
         unit: "KG",
         consumptionType: "主料",
       },
     });
+    const requirementId = materialRequirementByWorkOrder.get(s.workOrderId);
+    if (requirementId) {
+      await prisma.workOrderMaterialRequirement.update({
+        where: { id: requirementId },
+        data: {
+          issuedQty: { increment: s.issuedWeight },
+          consumedQty: { increment: s.issuedWeight - s.returnWeight },
+        },
+      });
+    }
     const workOrderOperationId = productionOperationByWorkOrder.get(s.workOrderId);
     if (workOrderOperationId) {
       await prisma.workOrderOperation.update({
@@ -606,7 +707,7 @@ async function main() {
 
   console.log("Seed 完成：");
   console.log(`  - SKU 6 / 物料 6 / 设备 4 / 模具 6 / 不良原因 ${injReasons.length + stpReasons.length}`);
-  console.log(`  - 工单 6 / 物料批次 4 / 生产批次 ${seeds.length}`);
+  console.log(`  - 受控 BOM 6 / 工单物料需求 6 / 工单 6 / 物料批次 4 / 生产批次 ${seeds.length}`);
   console.log("  模具累计模次（种子批次贡献部分）:", moldCountAccum);
 }
 

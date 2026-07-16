@@ -4,7 +4,11 @@ export async function getOperationExecutionData() {
   const [operations, equipments, molds, materialLots, defectReasons, routeVersions, reworkOrders] = await Promise.all([
     prisma.workOrderOperation.findMany({
       include: {
-        workOrder: { include: { sku: true, routeVersion: { include: { route: true } } } },
+        workOrder: { include: {
+          sku: true, routeVersion: { include: { route: true } },
+          bomDefinition: { include: { bom: true } },
+          materialRequirements: { include: { material: true, bomItem: { include: { substitutes: { where: { status: "启用" }, include: { material: true } } } } }, orderBy: { materialCode: "asc" } },
+        } },
         planEquipment: true,
         planMold: true,
         batches: {

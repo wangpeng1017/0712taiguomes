@@ -30,6 +30,7 @@ type RouteVersion = {
   route: { code: string; name: string; skuId: string };
   operations: { sequence: number; operationCode: string; operationName: string; isFinal: boolean }[];
 };
+type BomVersion = { id: string; version: string; bom: { code: string; name: string; skuId: string }; items: { id: string }[] };
 type WorkOrderOperation = {
   id: string; sequence: number; operationCode: string; operationName: string; operationType: string; workCenter: string | null;
   status: string; plannedQty: number; inputQty: number; goodQty: number; badQty: number; scrapQty: number;
@@ -53,6 +54,21 @@ export type WorkOrderRow = {
   completionRate: number;
   batchCount: number;
   bomVersion: string | null;
+  bomVersionId: string | null;
+  bomDefinition: { id: string; version: string; bom: { code: string; name: string } } | null;
+  materialRequirements: {
+    id: string;
+    materialCode: string;
+    materialName: string;
+    operationSequence: number | null;
+    operationCode: string | null;
+    operationName: string | null;
+    standardQty: number;
+    requiredQty: number;
+    issuedQty: number;
+    consumedQty: number;
+    unit: string;
+  }[];
   route: string | null;
   routeVersion: { id: string; version: string; status: string; route: { code: string; name: string } } | null;
   operations: WorkOrderOperation[];
@@ -62,18 +78,30 @@ export type WorkOrderRow = {
 const EQUIP_TYPE_FOR: Record<string, string> = { 注塑: "注塑机", 冲压: "冲床" };
 const MOLD_TYPE_FOR: Record<string, string> = { 注塑: "注塑模", 冲压: "冲压模" };
 
+function quantity(value: number) {
+  return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 4 }).format(value);
+}
+
+function varianceRate(standardQty: number, consumedQty: number) {
+  if (standardQty <= 0) return "-";
+  const rate = ((consumedQty - standardQty) / standardQty) * 100;
+  return `${rate > 0 ? "+" : ""}${rate.toFixed(2)}%`;
+}
+
 export function WorkOrderTable({
   rows,
   skus,
   equipments,
   molds,
   routeVersions,
+  bomVersions,
 }: {
   rows: WorkOrderRow[];
   skus: Sku[];
   equipments: Equipment[];
   molds: Mold[];
   routeVersions: RouteVersion[];
+  bomVersions: BomVersion[];
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<WorkOrderRow | null>(null);
@@ -96,6 +124,7 @@ export function WorkOrderTable({
     (m) => m.type === MOLD_TYPE_FOR[selectedSkuType ?? ""] && (!m.applicableSkuId || m.applicableSkuId === selectedSkuId)
   );
   const routeVersionOptions = routeVersions.filter((version) => version.route.skuId === selectedSkuId);
+  const bomVersionOptions = bomVersions.filter((version) => version.bom.skuId === selectedSkuId);
   const selectedRouteVersion = routeVersions.find((version) => version.id === selectedRouteVersionId);
   const filteredRows = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
@@ -134,7 +163,7 @@ export function WorkOrderTable({
     planRange: [dayjs.Dayjs, dayjs.Dayjs];
     planEquipmentId?: string;
     planMoldId?: string;
-    bomVersion?: string;
+    bomVersionId?: string;
     routeVersionId: string;
     note?: string;
   }) {
@@ -147,7 +176,7 @@ export function WorkOrderTable({
           planEnd: values.planRange[1].toISOString(),
           planEquipmentId: values.planEquipmentId,
           planMoldId: values.planMoldId,
-          bomVersion: values.bomVersion,
+          bomVersionId: values.bomVersionId,
           routeVersionId: values.routeVersionId,
           note: values.note,
         };
@@ -170,7 +199,7 @@ export function WorkOrderTable({
       skuId: row.sku.id, planQty: row.planQty,
       planRange: [dayjs(row.planStart), dayjs(row.planEnd)],
       planEquipmentId: row.planEquipment?.id, planMoldId: row.planMold?.id,
-      bomVersion: row.bomVersion, routeVersionId: row.routeVersion?.id, note: row.note,
+      bomVersionId: row.bomVersionId, routeVersionId: row.routeVersion?.id, note: row.note,
     }));
   }
 
@@ -289,14 +318,14 @@ export function WorkOrderTable({
         destroyOnHidden
         width={560}
       >
-        <Form form={form} layout="vertical" onFinish={submitCreate} initialValues={{ bomVersion: "V1.0" }}>
+        <Form form={form} layout="vertical" onFinish={submitCreate}>
           <Form.Item name="skuId" label="产品 SKU" rules={[{ required: true, message: "请选择产品 SKU" }]}>
             <Select
               placeholder="选择产品 SKU"
               options={skus.map((s) => ({ value: s.id, label: `${s.name}（${s.code}） · ${s.type}` }))}
               showSearch
               optionFilterProp="label"
-              onChange={() => form.setFieldsValue({ routeVersionId: undefined, planEquipmentId: undefined, planMoldId: undefined })}
+              onChange={() => form.setFieldsValue({ routeVersionId: undefined, bomVersionId: undefined, planEquipmentId: undefined, planMoldId: undefined })}
             />
           </Form.Item>
           <Form.Item name="planQty" label="计划数量" rules={[{ required: true, message: "请输入计划数量" }]}>
@@ -328,8 +357,8 @@ export function WorkOrderTable({
               }))}
             />
           </Form.Item>
-          <Form.Item name="bomVersion" label="BOM 版本">
-            <Input />
+          <Form.Item name="bomVersionId" label="BOM 版本" rules={[{ required: true, message: "请选择已发布 BOM 版本" }]}>
+            <Select allowClear placeholder={selectedSkuId ? "选择已发布 BOM 版本" : "请先选择产品 SKU"} disabled={!selectedSkuId || (!!editing && editing.status !== "未下达")} showSearch optionFilterProp="label" options={bomVersionOptions.map((version) => ({ value: version.id, label: `${version.bom.name}（${version.bom.code}）· ${version.version} · ${version.items.length}项物料` }))} />
           </Form.Item>
           <Form.Item name="routeVersionId" label="工艺路线版本" rules={[{ required: true, message: "请选择已发布的工艺路线版本" }]}>
             <Select
@@ -358,7 +387,7 @@ export function WorkOrderTable({
         </Form>
       </Modal>
 
-      <Drawer title={detail ? `工单详情 · ${detail.no}` : ""} open={!!detail} onClose={() => setDetail(null)} width={420}>
+      <Drawer title={detail ? `工单详情 · ${detail.no}` : ""} open={!!detail} onClose={() => setDetail(null)} width="min(1080px, 96vw)">
         {detail && (
           <Space direction="vertical" size="middle" style={{ width: "100%" }}>
             <div>
@@ -382,6 +411,35 @@ export function WorkOrderTable({
             <div>
               <div className="mes-meta">冻结工艺版本</div>
               <div>{detail.routeVersion ? `${detail.routeVersion.route.name}（${detail.routeVersion.route.code}）· ${detail.routeVersion.version}` : detail.route ?? "历史单工序"}</div>
+            </div>
+            <div>
+              <div className="mes-meta">冻结 BOM 版本</div>
+              <div>{detail.bomDefinition ? `${detail.bomDefinition.bom.name}（${detail.bomDefinition.bom.code}）· ${detail.bomDefinition.version}` : detail.bomVersion ?? "未绑定"}</div>
+            </div>
+            <div>
+              <div className="mes-meta" style={{ marginBottom: 8 }}>BOM 用量执行（工单累计）</div>
+              <Table
+                size="small"
+                rowKey="id"
+                pagination={false}
+                scroll={{ x: 900 }}
+                dataSource={detail.materialRequirements}
+                locale={{ emptyText: detail.status === "未下达" ? "工单下达后生成 BOM 用量快照" : "该工单暂无 BOM 用量要求" }}
+                columns={[
+                  { title: "工序", width: 125, render: (_, row) => row.operationSequence ? `${row.operationSequence} ${row.operationName ?? row.operationCode ?? ""}` : "通用/首工序" },
+                  { title: "物料", width: 190, render: (_, row) => <div><div>{row.materialName}</div><div className="mes-code mes-meta">{row.materialCode}</div></div> },
+                  { title: "标准需求", width: 105, render: (_, row) => <span className="tabular-nums">{quantity(row.standardQty)} {row.unit}</span> },
+                  { title: "含损耗需求", width: 115, render: (_, row) => <span className="tabular-nums">{quantity(row.requiredQty)} {row.unit}</span> },
+                  { title: "已领", width: 90, render: (_, row) => <span className="tabular-nums">{quantity(row.issuedQty)}</span> },
+                  { title: "已耗", width: 90, render: (_, row) => <span className="tabular-nums">{quantity(row.consumedQty)}</span> },
+                  { title: "剩余需求", width: 105, render: (_, row) => <span className="tabular-nums">{quantity(Math.max(row.requiredQty - row.consumedQty, 0))}</span> },
+                  { title: "耗用差异", width: 105, render: (_, row) => {
+                    const difference = row.consumedQty - row.standardQty;
+                    return <span className="tabular-nums">{difference > 0 ? "+" : ""}{quantity(difference)}</span>;
+                  } },
+                  { title: "差异率", width: 90, render: (_, row) => <span className="tabular-nums">{varianceRate(row.standardQty, row.consumedQty)}</span> },
+                ]}
+              />
             </div>
             <div>
               <div className="mes-meta" style={{ marginBottom: 8 }}>工序执行进度</div>

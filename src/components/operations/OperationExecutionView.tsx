@@ -14,7 +14,7 @@ type OperationTask = {
   qualityStatus: string; qualityRequired: boolean; isFinal: boolean; requiresEquipment: boolean; requiresMold: boolean;
   planEquipment: { id: string; code: string; name: string } | null;
   planMold: { id: string; code: string; name: string } | null;
-  workOrder: { id: string; no: string; type: "注塑" | "冲压"; status: string; sku: { code: string; name: string }; routeVersion: { version: string; route: { code: string; name: string } } | null };
+  workOrder: { id: string; no: string; type: "注塑" | "冲压"; status: string; sku: { code: string; name: string }; routeVersion: { version: string; route: { code: string; name: string } } | null; bomVersionId: string | null; bomDefinition: { version: string; bom: { code: string; name: string } } | null; materialRequirements: { id: string; materialId: string | null; materialCode: string; materialName: string; operationSequence: number | null; unit: string; standardQty: number; requiredQty: number; issuedQty: number; consumedQty: number; bomItem: { substitutes: { materialId: string; conversionRate: number; material: { name: string; code: string } }[] } | null }[] };
   batches: { id: string; batchNo: string; status: string; goodQty: number; badQty: number; startTime: string; operator: string }[];
 };
 type CompletedBatch = {
@@ -34,7 +34,7 @@ type ExecutionData = {
 type ReportFormValues = {
   equipmentId?: string;
   moldId?: string;
-  materialInputs?: { materialLotId?: string; qty?: number; consumptionType?: string }[];
+  materialInputs?: { requirementId?: string; materialLotId?: string; qty?: number; consumptionType?: string }[];
   sourceBatchInputs?: { batchId?: string; qty?: number; relationType?: "转序" | "拆批" | "合批" | "返工" }[];
   shift: "白班" | "夜班";
   operator: string;
@@ -48,6 +48,16 @@ type ReportFormValues = {
   leaderConfirmedBy?: string;
 };
 
+function quantity(value: number) {
+  return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 4 }).format(value);
+}
+
+function varianceRate(standardQty: number, consumedQty: number) {
+  if (standardQty <= 0) return "-";
+  const rate = ((consumedQty - standardQty) / standardQty) * 100;
+  return `${rate > 0 ? "+" : ""}${rate.toFixed(2)}%`;
+}
+
 export function OperationExecutionView({ data }: { data: ExecutionData }) {
   const [keyword, setKeyword] = useState("");
   const [status, setStatus] = useState<string>();
@@ -56,6 +66,10 @@ export function OperationExecutionView({ data }: { data: ExecutionData }) {
   const [reworkId, setReworkId] = useState<string>();
   const [form] = Form.useForm();
   const [pending, startTransition] = useTransition();
+
+  const isFirstTask = (operation: OperationTask) => !data.operations.some(
+    (candidate) => candidate.workOrder.id === operation.workOrder.id && candidate.sequence < operation.sequence
+  );
 
   const rows = useMemo(() => data.operations.filter((operation) => {
     const text = `${operation.workOrder.no} ${operation.workOrder.sku.code} ${operation.workOrder.sku.name} ${operation.operationCode} ${operation.operationName} ${operation.workCenter ?? ""}`.toLowerCase();
@@ -75,6 +89,12 @@ export function OperationExecutionView({ data }: { data: ExecutionData }) {
       .filter((batch) => batch.availableQty > 0);
   }, [data.completedBatches, data.operations, reporting]);
 
+  const reportingRequirements = reporting
+    ? reporting.workOrder.materialRequirements.filter((requirement) =>
+        requirement.operationSequence === reporting.sequence || (requirement.operationSequence == null && isFirstTask(reporting))
+      )
+    : [];
+
   function openReport(operation: OperationTask, rework?: ExecutionData["reworkOrders"][number]) {
     setReporting(operation);
     setReworkId(rework?.id);
@@ -89,7 +109,7 @@ export function OperationExecutionView({ data }: { data: ExecutionData }) {
       scrapWeight: 0,
       returnWeight: 0,
       sourceBatchInputs: rework ? [{ batchId: rework.sourceBatch.id, qty: rework.qty, relationType: "返工" }] : undefined,
-      materialInputs: operation.sequence === 10 ? [{}] : undefined,
+      materialInputs: !rework && (isFirstTask(operation) || operation.workOrder.materialRequirements.some((r) => r.operationSequence === operation.sequence)) ? [{}] : undefined,
     }));
   }
 
@@ -109,7 +129,7 @@ export function OperationExecutionView({ data }: { data: ExecutionData }) {
         equipmentId: values.equipmentId,
         moldId: values.moldId,
         materialInputs: (values.materialInputs ?? []).filter(
-          (item): item is { materialLotId: string; qty: number; consumptionType?: string } => !!item.materialLotId && !!item.qty
+          (item): item is { requirementId?: string; materialLotId: string; qty: number; consumptionType?: string } => !!item.materialLotId && !!item.qty
         ),
         sourceBatchInputs: (values.sourceBatchInputs ?? []).filter(
           (item): item is { batchId: string; qty: number; relationType?: "转序" | "拆批" | "合批" | "返工" } => !!item.batchId && !!item.qty
@@ -174,6 +194,7 @@ export function OperationExecutionView({ data }: { data: ExecutionData }) {
         {reworkId && <Alert type="warning" showIcon message="当前为返工任务报工，产出批次将与原不良批次建立返工谱系。" style={{ marginBottom: 16 }} />}
         <Descriptions size="small" bordered column={3} style={{ marginBottom: 16 }}>
           <Descriptions.Item label="工艺版本">{reporting.workOrder.routeVersion ? `${reporting.workOrder.routeVersion.route.name} ${reporting.workOrder.routeVersion.version}` : "-"}</Descriptions.Item>
+          <Descriptions.Item label="BOM 版本">{reporting.workOrder.bomDefinition ? `${reporting.workOrder.bomDefinition.bom.name}（${reporting.workOrder.bomDefinition.bom.code}）· ${reporting.workOrder.bomDefinition.version}` : "-"}</Descriptions.Item>
           <Descriptions.Item label="工作中心">{reporting.workCenter ?? "-"}</Descriptions.Item>
           <Descriptions.Item label="质量控制">{reporting.qualityRequired ? "报工后待检" : "免检自动放行"}</Descriptions.Item>
         </Descriptions>
@@ -185,16 +206,42 @@ export function OperationExecutionView({ data }: { data: ExecutionData }) {
           <Col span={8}><Form.Item name="timeRange" label="开始 / 结束" rules={[{ required: true }]}><DatePicker.RangePicker showTime style={{ width: "100%" }} /></Form.Item></Col>
         </Row>
 
-        {reporting.sequence === 10 && !reworkId ? <Form.List name="materialInputs">{(fields, { add, remove }) => <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
+        {!reworkId && reporting.workOrder.bomVersionId && reportingRequirements.length > 0 && <div style={{ marginBottom: 16 }}>
+          <div className="mes-section-title" style={{ marginBottom: 8 }}>当前工序 BOM 用量执行</div>
+          <Table
+            size="small"
+            rowKey="id"
+            pagination={false}
+            scroll={{ x: 900 }}
+            dataSource={reportingRequirements}
+            columns={[
+              { title: "物料", width: 190, render: (_, row) => <div><div>{row.materialName}</div><div className="mes-code mes-meta">{row.materialCode}</div></div> },
+              { title: "标准需求", width: 110, render: (_, row) => <span className="tabular-nums">{quantity(row.standardQty)} {row.unit}</span> },
+              { title: "含损耗需求", width: 120, render: (_, row) => <span className="tabular-nums">{quantity(row.requiredQty)} {row.unit}</span> },
+              { title: "已领", width: 90, render: (_, row) => <span className="tabular-nums">{quantity(row.issuedQty)}</span> },
+              { title: "已耗", width: 90, render: (_, row) => <span className="tabular-nums">{quantity(row.consumedQty)}</span> },
+              { title: "剩余需求", width: 105, render: (_, row) => <span className="tabular-nums">{quantity(Math.max(row.requiredQty - row.consumedQty, 0))}</span> },
+              { title: "耗用差异", width: 105, render: (_, row) => {
+                const difference = row.consumedQty - row.standardQty;
+                return <span className="tabular-nums">{difference > 0 ? "+" : ""}{quantity(difference)}</span>;
+              } },
+              { title: "差异率", width: 90, render: (_, row) => <span className="tabular-nums">{varianceRate(row.standardQty, row.consumedQty)}</span> },
+            ]}
+          />
+        </div>}
+
+        {!reworkId && (isFirstTask(reporting) || reporting.workOrder.materialRequirements.some((r) => r.operationSequence === reporting.sequence)) && <Form.List name="materialInputs">{(fields, { add, remove }) => <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
           <div className="mes-section-title">物料投入（支持多批次主料/辅料）</div>
           {fields.map((field) => <Row gutter={8} key={field.key}>
-            <Col span={12}><Form.Item name={[field.name, "materialLotId"]} rules={[{ required: true }]}><Select showSearch optionFilterProp="label" placeholder="选择物料批次" options={data.materialLots.map((lot) => ({ value: lot.id, label: `${lot.lotNo} · ${lot.material.name} · 可用${lot.remainingQty}${lot.unit}` }))} /></Form.Item></Col>
-            <Col span={5}><Form.Item name={[field.name, "qty"]} rules={[{ required: true }]}><InputNumber min={0.0001} placeholder="数量" style={{ width: "100%" }} /></Form.Item></Col>
-            <Col span={5}><Form.Item name={[field.name, "consumptionType"]} initialValue="主料"><Select options={["主料", "辅料"].map((value) => ({ value, label: value }))} /></Form.Item></Col>
+            {reporting.workOrder.bomVersionId && <Col span={8}><Form.Item name={[field.name, "requirementId"]} rules={[{ required: true }]}><Select showSearch optionFilterProp="label" placeholder="选择 BOM 用料要求" options={reportingRequirements.map((r) => ({ value: r.id, label: `${r.materialName} · 需求${quantity(r.requiredQty)}${r.unit} · 已耗${quantity(r.consumedQty)} · 剩余${quantity(Math.max(r.requiredQty - r.consumedQty, 0))}` }))} /></Form.Item></Col>}
+            <Col span={reporting.workOrder.bomVersionId ? 8 : 12}><Form.Item name={[field.name, "materialLotId"]} rules={[{ required: true }]}><Select showSearch optionFilterProp="label" placeholder="选择物料批次" options={data.materialLots.map((lot) => ({ value: lot.id, label: `${lot.lotNo} · ${lot.material.name} · 可用${lot.remainingQty}${lot.unit}` }))} /></Form.Item></Col>
+            <Col span={reporting.workOrder.bomVersionId ? 3 : 5}><Form.Item name={[field.name, "qty"]} rules={[{ required: true }]}><InputNumber min={0.0001} placeholder="数量" style={{ width: "100%" }} /></Form.Item></Col>
+            <Col span={reporting.workOrder.bomVersionId ? 3 : 5}><Form.Item name={[field.name, "consumptionType"]} initialValue="主料"><Select options={["主料", "辅料"].map((value) => ({ value, label: value }))} /></Form.Item></Col>
             <Col span={2}><Button onClick={() => remove(field.name)}>删</Button></Col>
           </Row>)}
           <Button icon={<PlusOutlined />} onClick={() => add({ consumptionType: "辅料" })}>增加物料批次</Button>
-        </Space>}</Form.List> : <Form.List name="sourceBatchInputs">{(fields, { add, remove }) => <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
+        </Space>}</Form.List>}
+        {(!isFirstTask(reporting) || reworkId) && <Form.List name="sourceBatchInputs">{(fields, { add, remove }) => <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
           <div className="mes-section-title">上游在制品投入（支持拆批/合批）</div>
           {fields.map((field) => <Row gutter={8} key={field.key}>
             <Col span={13}><Form.Item name={[field.name, "batchId"]} rules={[{ required: true }]}><Select showSearch optionFilterProp="label" placeholder="选择上游批次" options={predecessorBatches.map((batch) => ({ value: batch.id, label: `${batch.batchNo} · ${batch.workOrderOperation?.operationName} · 可转${batch.availableQty}` }))} /></Form.Item></Col>
