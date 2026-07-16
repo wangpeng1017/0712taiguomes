@@ -11,6 +11,7 @@
     "lint": "next lint",
     "db:seed": "tsx prisma/seed.ts",
     "db:process-backfill": "tsx scripts/backfill-legacy-process-data.ts",
+    "db:process-bootstrap": "tsx scripts/bootstrap-standard-process-routes.ts",
     "db:mysql:generate": "prisma generate --schema=prisma/mysql/schema.prisma",
     "db:mysql:migrate": "prisma migrate deploy --schema=prisma/mysql/schema.prisma",
     "deploy:test": "bash scripts/deploy-test.sh"

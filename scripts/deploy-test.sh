@@ -9,6 +9,7 @@ fi
 npm ci
 npm run db:mysql:generate
 npm run db:mysql:migrate
+npm run db:process-bootstrap
 npm run db:process-backfill
 NEXT_PUBLIC_BASE_PATH=/taiguo-mes npm run build
 
