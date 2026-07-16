@@ -13,6 +13,7 @@ import {
   Select,
   Space,
   Table,
+  Tag,
   message,
 } from "antd";
 import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
@@ -23,6 +24,17 @@ import { createWorkOrder, deleteWorkOrder, setWorkOrderStatus, updateWorkOrder }
 type Sku = { id: string; code: string; name: string; type: string };
 type Equipment = { id: string; code: string; name: string; type: string; status: string };
 type Mold = { id: string; code: string; name: string; type: string; applicableSkuId: string | null; status: string };
+type RouteVersion = {
+  id: string;
+  version: string;
+  route: { code: string; name: string; skuId: string };
+  operations: { sequence: number; operationCode: string; operationName: string; isFinal: boolean }[];
+};
+type WorkOrderOperation = {
+  id: string; sequence: number; operationCode: string; operationName: string; operationType: string; workCenter: string | null;
+  status: string; plannedQty: number; inputQty: number; goodQty: number; badQty: number; scrapQty: number;
+  transferredQty: number; qualityStatus: string; isFinal: boolean;
+};
 
 export type WorkOrderRow = {
   id: string;
@@ -42,6 +54,8 @@ export type WorkOrderRow = {
   batchCount: number;
   bomVersion: string | null;
   route: string | null;
+  routeVersion: { id: string; version: string; status: string; route: { code: string; name: string } } | null;
+  operations: WorkOrderOperation[];
   note: string | null;
 };
 
@@ -53,11 +67,13 @@ export function WorkOrderTable({
   skus,
   equipments,
   molds,
+  routeVersions,
 }: {
   rows: WorkOrderRow[];
   skus: Sku[];
   equipments: Equipment[];
   molds: Mold[];
+  routeVersions: RouteVersion[];
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<WorkOrderRow | null>(null);
@@ -69,6 +85,7 @@ export function WorkOrderTable({
   const [form] = Form.useForm();
   const [pending, startTransition] = useTransition();
   const selectedSkuId = Form.useWatch("skuId", form);
+  const selectedRouteVersionId = Form.useWatch("routeVersionId", form);
 
   const selectedSkuType = useMemo(
     () => skus.find((s) => s.id === selectedSkuId)?.type,
@@ -78,6 +95,8 @@ export function WorkOrderTable({
   const moldOptions = molds.filter(
     (m) => m.type === MOLD_TYPE_FOR[selectedSkuType ?? ""] && (!m.applicableSkuId || m.applicableSkuId === selectedSkuId)
   );
+  const routeVersionOptions = routeVersions.filter((version) => version.route.skuId === selectedSkuId);
+  const selectedRouteVersion = routeVersions.find((version) => version.id === selectedRouteVersionId);
   const filteredRows = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
     return rows.filter((row) => {
@@ -116,7 +135,7 @@ export function WorkOrderTable({
     planEquipmentId?: string;
     planMoldId?: string;
     bomVersion?: string;
-    route?: string;
+    routeVersionId: string;
     note?: string;
   }) {
     startTransition(async () => {
@@ -129,7 +148,7 @@ export function WorkOrderTable({
           planEquipmentId: values.planEquipmentId,
           planMoldId: values.planMoldId,
           bomVersion: values.bomVersion,
-          route: values.route,
+          routeVersionId: values.routeVersionId,
           note: values.note,
         };
         if (editing) await updateWorkOrder(editing.id, input);
@@ -151,7 +170,7 @@ export function WorkOrderTable({
       skuId: row.sku.id, planQty: row.planQty,
       planRange: [dayjs(row.planStart), dayjs(row.planEnd)],
       planEquipmentId: row.planEquipment?.id, planMoldId: row.planMold?.id,
-      bomVersion: row.bomVersion, route: row.route, note: row.note,
+      bomVersion: row.bomVersion, routeVersionId: row.routeVersion?.id, note: row.note,
     }));
   }
 
@@ -225,6 +244,9 @@ export function WorkOrderTable({
                 <div style={{ color: "#8c98a4" }}>{r.planMold?.code ?? "-"}</div>
               </div>
             ) },
+          { title: "工艺版本", width: 170, render: (_, r) => r.routeVersion
+              ? <div><div>{r.routeVersion.route.name}</div><div className="mes-code mes-meta">{r.routeVersion.route.code} · {r.routeVersion.version}</div></div>
+              : <span className="mes-meta">历史单工序</span> },
           { title: "进度", width: 160, render: (_, r) => (
               <div>
                 <Progress percent={Math.round(r.completionRate * 100)} size="small" status={r.completionRate >= 1 ? "success" : "active"} />
@@ -267,13 +289,14 @@ export function WorkOrderTable({
         destroyOnHidden
         width={560}
       >
-        <Form form={form} layout="vertical" onFinish={submitCreate} initialValues={{ bomVersion: "V1.0", route: "标准工艺" }}>
+        <Form form={form} layout="vertical" onFinish={submitCreate} initialValues={{ bomVersion: "V1.0" }}>
           <Form.Item name="skuId" label="产品 SKU" rules={[{ required: true, message: "请选择产品 SKU" }]}>
             <Select
               placeholder="选择产品 SKU"
               options={skus.map((s) => ({ value: s.id, label: `${s.name}（${s.code}） · ${s.type}` }))}
               showSearch
               optionFilterProp="label"
+              onChange={() => form.setFieldsValue({ routeVersionId: undefined, planEquipmentId: undefined, planMoldId: undefined })}
             />
           </Form.Item>
           <Form.Item name="planQty" label="计划数量" rules={[{ required: true, message: "请输入计划数量" }]}>
@@ -308,9 +331,27 @@ export function WorkOrderTable({
           <Form.Item name="bomVersion" label="BOM 版本">
             <Input />
           </Form.Item>
-          <Form.Item name="route" label="工艺路线">
-            <Input />
+          <Form.Item name="routeVersionId" label="工艺路线版本" rules={[{ required: true, message: "请选择已发布的工艺路线版本" }]}>
+            <Select
+              placeholder={selectedSkuId ? "选择已发布的工艺路线版本" : "请先选择产品 SKU"}
+              disabled={!selectedSkuId || (!!editing && editing.status !== "未下达")}
+              showSearch
+              optionFilterProp="label"
+              options={routeVersionOptions.map((version) => ({
+                value: version.id,
+                label: `${version.route.name}（${version.route.code}）· ${version.version} · ${version.operations.length}道工序`,
+              }))}
+            />
           </Form.Item>
+          {selectedSkuId && routeVersionOptions.length === 0 && <div className="mes-inline-note">该产品暂无已发布工艺路线，请先到“工艺管理”完成路线配置与发布。</div>}
+          {selectedRouteVersion && <div className="mes-route-preview">
+            {selectedRouteVersion.operations.map((operation, index) => (
+              <span key={`${operation.sequence}-${operation.operationCode}`}>
+                <Tag>{operation.sequence} {operation.operationName}{operation.isFinal ? " · 末道" : ""}</Tag>
+                {index < selectedRouteVersion.operations.length - 1 && <span className="mes-route-arrow">→</span>}
+              </span>
+            ))}
+          </div>}
           <Form.Item name="note" label="备注">
             <Input.TextArea rows={2} />
           </Form.Item>
@@ -337,6 +378,25 @@ export function WorkOrderTable({
             <div>
               <div style={{ color: "#8c98a4", fontSize: 12 }}>计划设备 / 模具</div>
               <div>{detail.planEquipment?.name ?? "-"} / {detail.planMold?.name ?? "-"}</div>
+            </div>
+            <div>
+              <div className="mes-meta">冻结工艺版本</div>
+              <div>{detail.routeVersion ? `${detail.routeVersion.route.name}（${detail.routeVersion.route.code}）· ${detail.routeVersion.version}` : detail.route ?? "历史单工序"}</div>
+            </div>
+            <div>
+              <div className="mes-meta" style={{ marginBottom: 8 }}>工序执行进度</div>
+              <Table<WorkOrderOperation>
+                size="small"
+                rowKey="id"
+                pagination={false}
+                dataSource={detail.operations}
+                locale={{ emptyText: "工单尚未下达，暂未生成工序任务" }}
+                columns={[
+                  { title: "工序", render: (_, operation) => `${operation.sequence} ${operation.operationName}` },
+                  { title: "良/不良", render: (_, operation) => `${operation.goodQty}/${operation.badQty}` },
+                  { title: "状态", render: (_, operation) => <StatusTag status={operation.status} /> },
+                ]}
+              />
             </div>
             <div>
               <div style={{ color: "#8c98a4", fontSize: 12 }}>当前生产批次数</div>

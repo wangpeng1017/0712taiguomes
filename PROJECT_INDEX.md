@@ -28,12 +28,18 @@
 ```mermaid
 flowchart LR
     A[原材料入库<br/>MaterialLot] --> B[工单创建/下达<br/>WorkOrder]
-    B --> C[领料<br/>MaterialIssue]
-    C --> D[开工绑定<br/>设备+模具+物料批次]
-    D --> E[生产报工<br/>ProductionBatch<br/>良品/不良]
+    B --> R[冻结路线版本<br/>ProcessRouteVersion]
+    R --> O[生成工序任务<br/>WorkOrderOperation]
+    A --> C[物料投入<br/>BatchMaterialConsumption]
+    O --> D[工序开工<br/>设备/模具/上游批次]
+    C --> D
+    D --> E[工序报工<br/>ProductionBatch<br/>良品/不良]
     E --> F[模具模次/冲次累计<br/>MoldMaster.currentCount]
     E --> G[不良登记<br/>DefectRecord]
-    E --> H[良品入库<br/>StockInRecord]
+    E --> Q[过程检验/返工<br/>OperationQualityResult/ReworkOrder]
+    Q --> G[批次谱系<br/>BatchGenealogy]
+    G --> O
+    Q --> H[末道良品入库<br/>StockInRecord]
     E --> I[自动生成日报<br/>按 Batch 聚合]
     E -.追溯.-> J[批次追溯<br/>正向/反向/模具]
 ```
@@ -51,6 +57,9 @@ src/
 ├── app/                     # 主业务页面，按 SPEC 模块分目录（无路由组，页面即顶层路由）
 │   ├── dashboard/           # 仪表盘 F009
 │   ├── work-orders/         # 生产工单 F002
+│   ├── process/             # 工艺管理 F010
+│   ├── operations/          # 工序任务/WIP F011
+│   ├── quality/             # 过程检验/返工 F012
 │   ├── injection/           # 注塑报工 F003
 │   ├── stamping/            # 冲压报工 F004
 │   ├── materials/           # 物料批次 F005
@@ -96,6 +105,9 @@ docs/                        # PRD.md / SHIP-PROFILE.md / _INDEX.md
 | 批次追溯 | `trace` | 跨表查询，无独立表 | 3 个 tab：正向/反向/模具 |
 | 生产日报 | `report` | 聚合 ProductionBatch 等 | 8 维度可切换聚合 |
 | 基础数据 | `master-data` | ProductSku/MaterialMaster/EquipmentMaster | 只读字典展示 |
+| 工艺管理 | `process` | OperationMaster/ProcessRoute/ProcessRouteVersion/RouteOperation | 路线版本受控发布 |
+| 工序执行 | `operations` | WorkOrderOperation/ProductionBatch/BatchGenealogy | 工序报工、WIP拆合批和转序 |
+| 过程质量 | `quality` | OperationQualityResult/ReworkOrder | 质量放行、冻结与返工 |
 
 ## 6. 文档指针
 

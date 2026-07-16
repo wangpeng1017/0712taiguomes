@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "test": "tsx --test tests/*.test.ts",
+    "test:process-smoke": "tsx scripts/smoke-process-route.ts",
     "start": "NODE_OPTIONS=--max-http-header-size=131072 next start",
     "lint": "next lint",
     "db:seed": "tsx prisma/seed.ts",
+    "db:process-backfill": "tsx scripts/backfill-legacy-process-data.ts",
     "db:mysql:generate": "prisma generate --schema=prisma/mysql/schema.prisma",
     "db:mysql:migrate": "prisma migrate deploy --schema=prisma/mysql/schema.prisma",
     "deploy:test": "bash scripts/deploy-test.sh"

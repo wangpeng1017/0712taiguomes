@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { generateBatchNo } from "@/lib/batch-no";
 import { MOLD_BLOCKED_STATUS } from "@/lib/constants";
 import { evaluateMoldAlert, thisMoldCount, totalQty } from "@/lib/production-calc";
+import { voidOperationBatch } from "@/lib/actions/operations";
 
 export type SubmitBatchInput = {
   type: "注塑" | "冲压";
@@ -33,11 +34,13 @@ export type SubmitBatchResult =
 
 export async function submitProductionBatch(input: SubmitBatchInput): Promise<SubmitBatchResult> {
   const [workOrder, equipment, mold, materialLot] = await Promise.all([
-    prisma.workOrder.findUniqueOrThrow({ where: { id: input.workOrderId } }),
+    prisma.workOrder.findUniqueOrThrow({ where: { id: input.workOrderId }, include: { _count: { select: { operations: true } } } }),
     prisma.equipmentMaster.findUniqueOrThrow({ where: { id: input.equipmentId } }),
     prisma.moldMaster.findUniqueOrThrow({ where: { id: input.moldId } }),
     prisma.materialLot.findUniqueOrThrow({ where: { id: input.materialLotId } }),
   ]);
+
+  if (workOrder._count.operations > 0) return { ok: false, error: "该工单已启用工艺路线，请到“工序任务”选择具体工序报工" };
 
   if (!["已下达", "生产中"].includes(workOrder.status)) return { ok: false, error: `工单当前状态为「${workOrder.status}」，不可报工` };
   if (workOrder.type !== input.type) return { ok: false, error: "工单类型与当前报工类型不一致" };
@@ -199,22 +202,29 @@ export async function voidProductionBatch(batchId: string, reason: string) {
     where: { id: batchId },
     include: { stockIns: true, mold: true, materialLot: true, workOrder: true },
   });
+  if (batch.workOrderOperationId) return voidOperationBatch(batchId, reason);
   if (batch.status === "已作废") throw new Error("该生产批次已经作废");
   if (batch.stockIns.length > 0) throw new Error("该批次已有入库记录，请先撤销入库后再作废");
+  if (!batch.materialLotId || !batch.materialLot || !batch.moldId || !batch.mold) throw new Error("该批次缺少旧版资源关联，请从工序任务页面执行安全作废");
+
+  const materialLotId = batch.materialLotId;
+  const materialLot = batch.materialLot;
+  const moldId = batch.moldId;
+  const mold = batch.mold;
 
   const issue = await prisma.materialIssue.findFirst({
-    where: { workOrderId: batch.workOrderId, materialLotId: batch.materialLotId, issuedAt: batch.startTime },
+    where: { workOrderId: batch.workOrderId, materialLotId, issuedAt: batch.startTime },
   });
   const materialReturn = batch.endTime
     ? await prisma.materialReturn.findFirst({
-        where: { workOrderId: batch.workOrderId, materialLotId: batch.materialLotId, returnedAt: batch.endTime },
+        where: { workOrderId: batch.workOrderId, materialLotId, returnedAt: batch.endTime },
       })
     : null;
   const restoredQty = (batch.issuedWeight ?? 0) - (batch.returnWeight ?? 0);
-  const newMoldCount = Math.max(batch.mold.currentCount - (batch.thisMoldCount ?? 0), 0);
-  const moldAlert = evaluateMoldAlert({ ...batch.mold, currentCount: newMoldCount });
-  const nextMoldStatus = MOLD_BLOCKED_STATUS.includes(batch.mold.status)
-    ? batch.mold.status
+  const newMoldCount = Math.max(mold.currentCount - (batch.thisMoldCount ?? 0), 0);
+  const moldAlert = evaluateMoldAlert({ ...mold, currentCount: newMoldCount });
+  const nextMoldStatus = MOLD_BLOCKED_STATUS.includes(mold.status)
+    ? mold.status
     : moldAlert.dueForMaintenance ? "待保养" : "可用";
 
   const remainingGood = await prisma.productionBatch.aggregate({
@@ -236,14 +246,14 @@ export async function voidProductionBatch(batchId: string, reason: string) {
       data: { status: "已作废", note: [batch.note, `作废原因：${reason.trim()}`].filter(Boolean).join("\n") },
     }),
     prisma.materialLot.update({
-      where: { id: batch.materialLotId },
+      where: { id: materialLotId },
       data: {
         remainingQty: { increment: restoredQty },
-        stockStatus: ["合格", "让步接收"].includes(batch.materialLot.inspectStatus) ? "可用" : "冻结",
+        stockStatus: ["合格", "让步接收"].includes(materialLot.inspectStatus) ? "可用" : "冻结",
       },
     }),
     prisma.moldMaster.update({
-      where: { id: batch.moldId },
+      where: { id: moldId },
       data: { currentCount: newMoldCount, status: nextMoldStatus },
     }),
     prisma.workOrder.update({ where: { id: batch.workOrderId }, data: { status: nextWorkOrderStatus } }),

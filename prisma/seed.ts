@@ -25,13 +25,22 @@ function at(day: Date, hh: number, mm: number): Date {
 
 async function main() {
   // 依赖顺序倒序清空，保证可重复执行 `npx tsx prisma/seed.ts`
+  await prisma.operationQualityResult.deleteMany();
+  await prisma.batchGenealogy.deleteMany();
+  await prisma.batchMaterialConsumption.deleteMany();
+  await prisma.reworkOrder.deleteMany();
   await prisma.stockInRecord.deleteMany();
   await prisma.defectRecord.deleteMany();
   await prisma.materialReturn.deleteMany();
   await prisma.materialIssue.deleteMany();
   await prisma.productionBatch.deleteMany();
   await prisma.moldMaintenanceRecord.deleteMany();
+  await prisma.workOrderOperation.deleteMany();
   await prisma.workOrder.deleteMany();
+  await prisma.routeOperation.deleteMany();
+  await prisma.processRouteVersion.deleteMany();
+  await prisma.processRoute.deleteMany();
+  await prisma.operationMaster.deleteMany();
   await prisma.materialLot.deleteMany();
   await prisma.moldMaster.deleteMany();
   await prisma.defectReason.deleteMany();
@@ -161,6 +170,123 @@ async function main() {
   const reasonByName = (name: string) =>
     [...injReasons, ...stpReasons].find((r) => r.reason === name)!;
 
+  // ---------- 工序与工艺路线 ----------
+  const operationSpecs = [
+    { code: "OP-DRY", name: "原料干燥", type: "生产", appliesTo: "注塑", workCenter: "注塑前处理" },
+    { code: "OP-INJ", name: "注塑成型", type: "生产", appliesTo: "注塑", workCenter: "注塑车间" },
+    { code: "OP-TRIM", name: "修边", type: "生产", appliesTo: "注塑", workCenter: "后处理区" },
+    { code: "OP-FEED", name: "卷料上料", type: "生产", appliesTo: "冲压", workCenter: "冲压备料区" },
+    { code: "OP-STP", name: "冲压成型", type: "生产", appliesTo: "冲压", workCenter: "冲压车间" },
+    { code: "OP-DEBURR", name: "去毛刺", type: "生产", appliesTo: "冲压", workCenter: "后处理区" },
+    { code: "OP-IPQC", name: "过程检验", type: "检验", appliesTo: "通用", workCenter: "质量检验区" },
+    { code: "OP-PACK", name: "包装入库", type: "包装", appliesTo: "通用", workCenter: "包装区" },
+  ];
+  const operations = new Map<string, Awaited<ReturnType<typeof prisma.operationMaster.create>>>();
+  for (const spec of operationSpecs) {
+    const operation = await prisma.operationMaster.create({ data: spec });
+    operations.set(operation.code, operation);
+  }
+
+  type RouteStepSeed = {
+    code: string;
+    sequence: number;
+    standardCycleSeconds?: number;
+    setupMinutes?: number;
+    requiresEquipment?: boolean;
+    requiresMold?: boolean;
+    qualityRequired?: boolean;
+    isFinal?: boolean;
+  };
+  async function createRouteVersion(input: {
+    routeCode: string;
+    routeName: string;
+    skuId: string;
+    version: string;
+    versionStatus: string;
+    steps: RouteStepSeed[];
+    existingRouteId?: string;
+    changeReason?: string;
+  }) {
+    const route = input.existingRouteId
+      ? await prisma.processRoute.findUniqueOrThrow({ where: { id: input.existingRouteId } })
+      : await prisma.processRoute.create({ data: { code: input.routeCode, name: input.routeName, skuId: input.skuId } });
+    const routeVersion = await prisma.processRouteVersion.create({
+      data: {
+        routeId: route.id,
+        version: input.version,
+        status: input.versionStatus,
+        effectiveFrom: input.versionStatus === "已发布" ? D10 : null,
+        releasedAt: input.versionStatus === "已发布" ? at(D10, 8, 0) : null,
+        releasedBy: input.versionStatus === "已发布" ? "工艺主管" : null,
+        changeReason: input.changeReason,
+      },
+    });
+    for (const step of input.steps) {
+      const operation = operations.get(step.code)!;
+      await prisma.routeOperation.create({
+        data: {
+          routeVersionId: routeVersion.id,
+          operationId: operation.id,
+          sequence: step.sequence,
+          operationCode: operation.code,
+          operationName: operation.name,
+          operationType: operation.type,
+          workCenter: operation.workCenter,
+          standardCycleSeconds: step.standardCycleSeconds,
+          setupMinutes: step.setupMinutes,
+          requiresEquipment: step.requiresEquipment ?? false,
+          requiresMold: step.requiresMold ?? false,
+          qualityRequired: step.qualityRequired ?? false,
+          isFinal: step.isFinal ?? false,
+        },
+      });
+    }
+    return { route, routeVersion };
+  }
+
+  const injRoute = await createRouteVersion({
+    routeCode: "RT-INJ-CN-001", routeName: "ECU外壳上盖标准注塑路线", skuId: skuInj1.id,
+    version: "V0.9", versionStatus: "已停用", changeReason: "历史单工序路线归档",
+    steps: [{ code: "OP-INJ", sequence: 10, requiresEquipment: true, requiresMold: true, isFinal: true }],
+  });
+  const injRouteV1 = await createRouteVersion({
+    routeCode: "RT-INJ-CN-001", routeName: "ECU外壳上盖标准注塑路线", skuId: skuInj1.id,
+    existingRouteId: injRoute.route.id, version: "V1.0", versionStatus: "已发布", changeReason: "补齐前处理、检验和包装工序",
+    steps: [
+      { code: "OP-DRY", sequence: 10, standardCycleSeconds: 10800, setupMinutes: 10 },
+      { code: "OP-INJ", sequence: 20, standardCycleSeconds: 45, setupMinutes: 30, requiresEquipment: true, requiresMold: true },
+      { code: "OP-TRIM", sequence: 30, standardCycleSeconds: 8 },
+      { code: "OP-IPQC", sequence: 40, standardCycleSeconds: 3, qualityRequired: true },
+      { code: "OP-PACK", sequence: 50, standardCycleSeconds: 5, isFinal: true },
+    ],
+  });
+  const stpRoute = await createRouteVersion({
+    routeCode: "RT-STP-CN-001", routeName: "结构支架标准冲压路线", skuId: skuStp1.id,
+    version: "V0.9", versionStatus: "已停用", changeReason: "历史单工序路线归档",
+    steps: [{ code: "OP-STP", sequence: 10, requiresEquipment: true, requiresMold: true, isFinal: true }],
+  });
+  const stpRouteV1 = await createRouteVersion({
+    routeCode: "RT-STP-CN-001", routeName: "结构支架标准冲压路线", skuId: skuStp1.id,
+    existingRouteId: stpRoute.route.id, version: "V1.0", versionStatus: "已发布", changeReason: "补齐上料、后处理、检验和包装工序",
+    steps: [
+      { code: "OP-FEED", sequence: 10, standardCycleSeconds: 1800, setupMinutes: 15 },
+      { code: "OP-STP", sequence: 20, standardCycleSeconds: 2, setupMinutes: 25, requiresEquipment: true, requiresMold: true },
+      { code: "OP-DEBURR", sequence: 30, standardCycleSeconds: 6 },
+      { code: "OP-IPQC", sequence: 40, standardCycleSeconds: 3, qualityRequired: true },
+      { code: "OP-PACK", sequence: 50, standardCycleSeconds: 5, isFinal: true },
+    ],
+  });
+  const defaultRouteVersions = new Map<string, string>();
+  for (const sku of [skuInj2, skuInj3, skuStp2, skuStp3]) {
+    const operationCode = sku.type === "注塑" ? "OP-INJ" : "OP-STP";
+    const created = await createRouteVersion({
+      routeCode: `RT-${sku.code}`, routeName: `${sku.name}默认工艺路线`, skuId: sku.id,
+      version: "V1.0", versionStatus: "已发布", changeReason: "兼容一期历史单工序报工",
+      steps: [{ code: operationCode, sequence: 10, requiresEquipment: true, requiresMold: true, isFinal: true }],
+    });
+    defaultRouteVersions.set(sku.id, created.routeVersion.id);
+  }
+
   // ---------- 物料批次入库 ----------
   const lotPA66 = await prisma.materialLot.create({
     data: {
@@ -252,44 +378,86 @@ async function main() {
     data: {
       no: "WO-20260712-001", skuId: skuInj1.id, type: "注塑", planQty: 5000,
       planStart: D10, planEnd: D14, planEquipmentId: eqInj01.id, planMoldId: mldInj1.id,
-      bomVersion: "V1.0", route: "标准注塑工艺", status: "生产中",
+      bomVersion: "V1.0", route: "标准注塑工艺", routeVersionId: injRouteV1.routeVersion.id, status: "生产中",
     },
   });
   const wo2 = await prisma.workOrder.create({
     data: {
       no: "WO-20260712-002", skuId: skuStp1.id, type: "冲压", planQty: 8000,
       planStart: D10, planEnd: D15, planEquipmentId: eqStp02.id, planMoldId: mldStp1.id,
-      bomVersion: "V1.0", route: "标准冲压工艺", status: "生产中",
+      bomVersion: "V1.0", route: "标准冲压工艺", routeVersionId: stpRouteV1.routeVersion.id, status: "生产中",
     },
   });
-  await prisma.workOrder.create({
+  const wo3 = await prisma.workOrder.create({
     data: {
       no: "WO-20260712-003", skuId: skuInj2.id, type: "注塑", planQty: 3000,
       planStart: D11, planEnd: D13, planEquipmentId: eqInj02.id, planMoldId: mldInj2.id,
-      bomVersion: "V1.0", route: "标准注塑工艺", status: "已下达",
+      bomVersion: "V1.0", route: "标准注塑工艺", routeVersionId: defaultRouteVersions.get(skuInj2.id), status: "已下达",
     },
   });
   const wo4 = await prisma.workOrder.create({
     data: {
       no: "WO-20260712-004", skuId: skuStp2.id, type: "冲压", planQty: 6000,
       planStart: D11, planEnd: D14, planEquipmentId: eqStp01.id, planMoldId: mldStp2.id,
-      bomVersion: "V1.0", route: "标准冲压工艺", status: "生产中",
+      bomVersion: "V1.0", route: "标准冲压工艺", routeVersionId: defaultRouteVersions.get(skuStp2.id), status: "生产中",
     },
   });
-  await prisma.workOrder.create({
+  const wo5 = await prisma.workOrder.create({
     data: {
       no: "WO-20260712-005", skuId: skuInj3.id, type: "注塑", planQty: 2000,
       planStart: D13, planEnd: D15, planEquipmentId: eqInj01.id, planMoldId: mldInj3.id,
-      bomVersion: "V1.0", route: "标准注塑工艺", status: "未下达",
+      bomVersion: "V1.0", route: "标准注塑工艺", routeVersionId: defaultRouteVersions.get(skuInj3.id), status: "未下达",
     },
   });
-  await prisma.workOrder.create({
+  const wo6 = await prisma.workOrder.create({
     data: {
       no: "WO-20260712-006", skuId: skuStp3.id, type: "冲压", planQty: 1500,
-      planStart: D14, planEnd: D16, planEquipmentId: eqStp02.id, status: "已下达",
+      planStart: D14, planEnd: D16, planEquipmentId: eqStp02.id, routeVersionId: defaultRouteVersions.get(skuStp3.id), status: "已下达",
       note: "计划模具 MLD-STP-003 当前维修中，下达时需知晓",
     },
   });
+
+  const productionOperationByWorkOrder = new Map<string, string>();
+  for (const workOrder of [wo1, wo2, wo3, wo4, wo5, wo6]) {
+    // 工序任务只在工单下达时生成；未下达工单仅保留已选路线版本。
+    if (workOrder.status === "未下达") continue;
+    const routeOperations = await prisma.routeOperation.findMany({
+      where: { routeVersionId: workOrder.routeVersionId! },
+      orderBy: { sequence: "asc" },
+    });
+    const productionIndex = routeOperations.findIndex((step) => step.requiresEquipment || step.requiresMold);
+    for (let index = 0; index < routeOperations.length; index += 1) {
+      const step = routeOperations[index];
+      const isProductionStep = step.requiresEquipment || step.requiresMold;
+      const operationStatus = workOrder.status === "生产中"
+          ? index < productionIndex ? "已完成" : index === productionIndex ? "生产中" : "等待前序"
+          : index === 0 ? "可开工" : "等待前序";
+      const workOrderOperation = await prisma.workOrderOperation.create({
+        data: {
+          workOrderId: workOrder.id,
+          routeOperationId: step.id,
+          operationId: step.operationId,
+          operationCode: step.operationCode,
+          operationName: step.operationName,
+          operationType: step.operationType,
+          sequence: step.sequence,
+          status: operationStatus,
+          plannedQty: workOrder.planQty,
+          qualityStatus: step.qualityRequired ? "待检" : "不适用",
+          isFinal: step.isFinal,
+          requiresEquipment: step.requiresEquipment,
+          requiresMold: step.requiresMold,
+          qualityRequired: step.qualityRequired,
+          reportMode: step.reportMode,
+          standardCycleSeconds: step.standardCycleSeconds,
+          workCenter: step.workCenter,
+          planEquipmentId: step.requiresEquipment ? workOrder.planEquipmentId : null,
+          planMoldId: step.requiresMold ? workOrder.planMoldId : null,
+        },
+      });
+      if (isProductionStep) productionOperationByWorkOrder.set(workOrder.id, workOrderOperation.id);
+    }
+  }
 
   // ---------- 历史生产批次（含领退料/不良/入库），用于演示追溯与日报 ----------
   type BatchSeed = {
@@ -352,6 +520,7 @@ async function main() {
     const batch = await prisma.productionBatch.create({
       data: {
         batchNo, workOrderId: s.workOrderId, skuId: s.skuId, type: s.type,
+        workOrderOperationId: productionOperationByWorkOrder.get(s.workOrderId),
         equipmentId: s.equipmentId, moldId: s.moldId, materialLotId: s.materialLotId,
         shift: s.shift, operator: s.operator,
         startTime: at(s.day, s.startH, 0), endTime: at(s.day, s.endH, 0),
@@ -370,6 +539,29 @@ async function main() {
         issuedBy: s.operator, issuedAt: at(s.day, s.startH, 0), equipmentId: s.equipmentId,
       },
     });
+    await prisma.batchMaterialConsumption.create({
+      data: {
+        batchId: batch.id,
+        materialLotId: s.materialLotId,
+        qty: s.issuedWeight - s.returnWeight,
+        unit: "KG",
+        consumptionType: "主料",
+      },
+    });
+    const workOrderOperationId = productionOperationByWorkOrder.get(s.workOrderId);
+    if (workOrderOperationId) {
+      await prisma.workOrderOperation.update({
+        where: { id: workOrderOperationId },
+        data: {
+          inputQty: { increment: total },
+          goodQty: { increment: s.goodQty },
+          badQty: { increment: s.badQty },
+          scrapQty: { increment: s.badQty },
+          transferredQty: { increment: s.goodQty },
+          startedAt: at(s.day, s.startH, 0),
+        },
+      });
+    }
     if (s.returnWeight > 0) {
       await prisma.materialReturn.create({
         data: {

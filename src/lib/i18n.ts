@@ -3,6 +3,9 @@ export type AppLocale = "zh" | "en";
 const EN: Record<string, string> = {
   "MES 制造执行": "MES Manufacturing",
   "仪表盘": "Dashboard", "生产管理": "Production Management", "生产工单": "Work Orders", "注塑报工": "Injection Reporting", "冲压报工": "Stamping Reporting",
+  "工序任务": "Operation Tasks", "注塑生产批次": "Injection Batches", "冲压生产批次": "Stamping Batches",
+  "工艺管理": "Process Engineering", "工序管理": "Operation Master", "路线版本 / 工序配置": "Route Versions / Operations",
+  "过程检验 / 返工": "In-process Inspection / Rework",
   "物料管理": "Material Management", "模具管理": "Tooling Management", "质量与追溯": "Quality & Traceability", "生产报表": "Production Reports",
   "当前登录用户": "Current user", "系统管理员": "System Administrator",
   "物料批次": "Material Lots", "模具台账": "Molds", "批次追溯": "Traceability", "生产日报": "Production Report", "基础数据": "Master Data",

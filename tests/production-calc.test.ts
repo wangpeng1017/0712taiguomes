@@ -2,11 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   actualConsumptionWeight,
+  availableTransferQty,
   defectRate,
   evaluateMoldAlert,
+  firstPassYield,
+  isOperationQuantityClosed,
   materialUtilization,
+  operationQuantityVariance,
   thisMoldCount,
   totalQty,
+  workOrderCompletionRate,
 } from "../src/lib/production-calc";
 
 test("production quantity and rate formulas remain closed", () => {
@@ -30,4 +35,25 @@ test("mold alert covers life and maintenance-cycle thresholds", () => {
     evaluateMoldAlert({ currentCount: 1000, designLife: 1000, warnThreshold: 0.8, maintCycle: 500, lastMaintCount: 900 }).overLife,
     true
   );
+});
+
+test("operation transfer and completion use released and final-operation quantities", () => {
+  assert.equal(availableTransferQty(980, 600), 380);
+  assert.equal(availableTransferQty(980, 1000), 0);
+  assert.equal(workOrderCompletionRate(960, 1000), 0.96);
+  assert.equal(firstPassYield(960, 1000), 0.96);
+});
+
+test("operation quantity balance covers good, scrap, rework and WIP outputs", () => {
+  const balance = {
+    inputQty: 1000,
+    reworkInputQty: 20,
+    goodTransferQty: 960,
+    scrapQty: 10,
+    reworkOutputQty: 20,
+    wipQty: 30,
+  };
+  assert.equal(operationQuantityVariance(balance), 0);
+  assert.equal(isOperationQuantityClosed(balance), true);
+  assert.equal(isOperationQuantityClosed({ ...balance, goodTransferQty: 959 }), false);
 });

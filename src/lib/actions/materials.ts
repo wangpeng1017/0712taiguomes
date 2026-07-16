@@ -44,8 +44,10 @@ export async function createStockIn(input: { batchId: string; qty: number; wareh
   if (!input.warehouse.trim() || !input.inBy.trim()) throw new Error("仓库和入库人不能为空");
   const batch = await prisma.productionBatch.findUniqueOrThrow({
     where: { id: input.batchId },
-    include: { sku: true, stockIns: true },
+    include: { sku: true, stockIns: true, workOrderOperation: true },
   });
+  if (batch.status !== "已完工") throw new Error("只有已完成并放行的生产批次可以入库");
+  if (batch.workOrderOperation && !batch.workOrderOperation.isFinal) throw new Error("中间工序产出属于在制品，请通过工序转序流转，不可直接办理成品入库");
 
   const alreadyIn = batch.stockIns.filter((r) => r.type !== "不良品隔离").reduce((s, r) => s + r.qty, 0);
   if (alreadyIn + input.qty > batch.goodQty) {
@@ -111,7 +113,7 @@ export async function updateMaterialLot(input: {
 
 export async function deleteMaterialLot(id: string) {
   const lot = await prisma.materialLot.findUniqueOrThrow({
-    where: { id }, include: { _count: { select: { issues: true, returns: true, batches: true } } },
+    where: { id }, include: { _count: { select: { issues: true, returns: true, batches: true, batchConsumptions: true } } },
   });
   if (Object.values(lot._count).some((count) => count > 0)) throw new Error("该物料批次已有领退料或生产记录，不可删除");
   await prisma.materialLot.delete({ where: { id } });

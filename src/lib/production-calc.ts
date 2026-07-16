@@ -5,6 +5,41 @@ export function totalQty(goodQty: number, badQty: number): number {
   return goodQty + badQty;
 }
 
+export function firstPassYield(goodQty: number, totalInputQty: number): number {
+  return totalInputQty > 0 ? goodQty / totalInputQty : 0;
+}
+
+export function availableTransferQty(releasedQty: number, consumedQty: number): number {
+  return Math.max(releasedQty - consumedQty, 0);
+}
+
+export type OperationQuantityBalance = {
+  inputQty: number;
+  reworkInputQty?: number;
+  goodTransferQty: number;
+  scrapQty?: number;
+  reworkOutputQty?: number;
+  wipQty?: number;
+};
+
+export function operationQuantityVariance(balance: OperationQuantityBalance): number {
+  const input = balance.inputQty + (balance.reworkInputQty ?? 0);
+  const output = balance.goodTransferQty
+    + (balance.scrapQty ?? 0)
+    + (balance.reworkOutputQty ?? 0)
+    + (balance.wipQty ?? 0);
+  return input - output;
+}
+
+export function isOperationQuantityClosed(balance: OperationQuantityBalance): boolean {
+  return Math.abs(operationQuantityVariance(balance)) < 1e-9;
+}
+
+export function workOrderCompletionRate(finalOperationGoodQty: number, planQty: number): number {
+  if (planQty <= 0) return 0;
+  return finalOperationGoodQty / planQty;
+}
+
 export function defectRate(badQty: number, total: number): number {
   return total > 0 ? badQty / total : 0;
 }

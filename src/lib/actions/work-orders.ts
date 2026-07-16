@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { WORK_ORDER_STATUS, WORK_ORDER_TRANSITIONS } from "@/lib/constants";
+import { isFinalOperationComplete } from "@/lib/operation-workflow";
 
 function nextWorkOrderNo(): string {
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -18,7 +19,7 @@ export async function createWorkOrder(input: {
   planEquipmentId?: string;
   planMoldId?: string;
   bomVersion?: string;
-  route?: string;
+  routeVersionId: string;
   note?: string;
 }) {
   const sku = await prisma.productSku.findUniqueOrThrow({ where: { id: input.skuId } });
@@ -30,10 +31,18 @@ export async function createWorkOrder(input: {
     throw new Error("计划结束日期不可早于开始日期");
   }
 
-  const [equipment, mold] = await Promise.all([
+  const [equipment, mold, routeVersion] = await Promise.all([
     input.planEquipmentId ? prisma.equipmentMaster.findUniqueOrThrow({ where: { id: input.planEquipmentId } }) : null,
     input.planMoldId ? prisma.moldMaster.findUniqueOrThrow({ where: { id: input.planMoldId } }) : null,
+    prisma.processRouteVersion.findUniqueOrThrow({ where: { id: input.routeVersionId }, include: { route: true, operations: true } }),
   ]);
+  if (routeVersion.status !== "已发布" || routeVersion.route.status !== "启用") throw new Error("只能选择已发布且启用的工艺路线版本");
+  if (routeVersion.route.skuId !== sku.id) throw new Error("所选工艺路线不适用于该产品 SKU");
+  if (routeVersion.effectiveFrom && planStart < routeVersion.effectiveFrom) throw new Error("计划开始日期早于工艺版本生效日期");
+  if (routeVersion.effectiveTo && planStart > routeVersion.effectiveTo) throw new Error("计划开始日期已超过工艺版本失效日期");
+  if (routeVersion.operations.length === 0 || !routeVersion.operations.some((operation) => operation.isFinal)) {
+    throw new Error("工艺路线必须配置工序并指定末道工序");
+  }
   const expectedEquipmentType = sku.type === "注塑" ? "注塑机" : "冲床";
   const expectedMoldType = sku.type === "注塑" ? "注塑模" : "冲压模";
   if (equipment && (equipment.type !== expectedEquipmentType || equipment.status !== "可用")) throw new Error("计划设备类型或状态不符合要求");
@@ -52,7 +61,8 @@ export async function createWorkOrder(input: {
       planEquipmentId: input.planEquipmentId || null,
       planMoldId: input.planMoldId || null,
       bomVersion: input.bomVersion || "V1.0",
-      route: input.route || "标准工艺",
+      routeVersionId: routeVersion.id,
+      route: `${routeVersion.route.name} ${routeVersion.version}`,
       note: input.note || null,
       status: "未下达",
     },
@@ -63,11 +73,12 @@ export async function createWorkOrder(input: {
 
 export async function updateWorkOrder(id: string, input: {
   skuId: string; planQty: number; planStart: string; planEnd: string; planEquipmentId?: string;
-  planMoldId?: string; bomVersion?: string; route?: string; note?: string;
+  planMoldId?: string; bomVersion?: string; routeVersionId: string; note?: string;
 }) {
-  const current = await prisma.workOrder.findUniqueOrThrow({ where: { id }, include: { _count: { select: { batches: true } } } });
+  const current = await prisma.workOrder.findUniqueOrThrow({ where: { id }, include: { _count: { select: { batches: true, operations: true } } } });
   if (["已完工", "已关闭"].includes(current.status)) throw new Error(`「${current.status}」工单不可编辑`);
   if (current._count.batches > 0 && input.skuId !== current.skuId) throw new Error("已有生产批次后不可更换产品 SKU");
+  if (current.status !== "未下达" && input.routeVersionId !== current.routeVersionId) throw new Error("工单下达后工艺路线版本已冻结，不可直接更换");
   const sku = await prisma.productSku.findUniqueOrThrow({ where: { id: input.skuId } });
   if (sku.status !== "启用" || !["注塑", "冲压"].includes(sku.type)) throw new Error("所选产品不可用于生产工单");
   if (!Number.isInteger(input.planQty) || input.planQty <= 0) throw new Error("计划数量必须是正整数");
@@ -77,10 +88,16 @@ export async function updateWorkOrder(id: string, input: {
   if (current._count.batches > 0 && (input.planEquipmentId !== current.planEquipmentId || input.planMoldId !== current.planMoldId)) {
     throw new Error("已有生产批次后不可更换计划设备或模具");
   }
-  const [equipment, mold] = await Promise.all([
+  const [equipment, mold, routeVersion] = await Promise.all([
     input.planEquipmentId ? prisma.equipmentMaster.findUniqueOrThrow({ where: { id: input.planEquipmentId } }) : null,
     input.planMoldId ? prisma.moldMaster.findUniqueOrThrow({ where: { id: input.planMoldId } }) : null,
+    prisma.processRouteVersion.findUniqueOrThrow({ where: { id: input.routeVersionId }, include: { route: true, operations: true } }),
   ]);
+  if (routeVersion.status !== "已发布" || routeVersion.route.status !== "启用") throw new Error("只能选择已发布且启用的工艺路线版本");
+  if (routeVersion.route.skuId !== sku.id) throw new Error("所选工艺路线不适用于该产品 SKU");
+  if (routeVersion.effectiveFrom && planStart < routeVersion.effectiveFrom) throw new Error("计划开始日期早于工艺版本生效日期");
+  if (routeVersion.effectiveTo && planStart > routeVersion.effectiveTo) throw new Error("计划开始日期已超过工艺版本失效日期");
+  if (!routeVersion.operations.some((operation) => operation.isFinal)) throw new Error("工艺路线尚未指定末道工序");
   const expectedEquipmentType = sku.type === "注塑" ? "注塑机" : "冲床";
   const expectedMoldType = sku.type === "注塑" ? "注塑模" : "冲压模";
   if (equipment && (equipment.type !== expectedEquipmentType || equipment.status !== "可用")) throw new Error("计划设备类型或状态不符合要求");
@@ -92,7 +109,8 @@ export async function updateWorkOrder(id: string, input: {
     data: {
       skuId: input.skuId, type: sku.type, planQty: input.planQty, planStart, planEnd,
       planEquipmentId: input.planEquipmentId || null, planMoldId: input.planMoldId || null,
-      bomVersion: input.bomVersion?.trim() || "V1.0", route: input.route?.trim() || "标准工艺", note: input.note?.trim() || null,
+      bomVersion: input.bomVersion?.trim() || "V1.0", routeVersionId: routeVersion.id,
+      route: `${routeVersion.route.name} ${routeVersion.version}`, note: input.note?.trim() || null,
     },
   });
   revalidatePath("/work-orders");
@@ -102,7 +120,7 @@ export async function updateWorkOrder(id: string, input: {
 export async function deleteWorkOrder(id: string) {
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
     where: { id },
-    include: { _count: { select: { batches: true, materialIssues: true, materialReturns: true } } },
+    include: { _count: { select: { batches: true, operations: true, materialIssues: true, materialReturns: true } } },
   });
   if (workOrder.status !== "未下达") throw new Error("只有未下达工单可以删除");
   if (Object.values(workOrder._count).some((count) => count > 0)) throw new Error("该工单已有业务记录，不可删除");
@@ -115,18 +133,75 @@ export async function setWorkOrderStatus(id: string, status: string) {
   if (!(WORK_ORDER_STATUS as readonly string[]).includes(status)) throw new Error("无效的工单状态");
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
     where: { id },
-    include: { batches: { where: { status: "已完工" }, select: { goodQty: true } } },
+    include: {
+      batches: { where: { status: "已完工" }, select: { goodQty: true } },
+      operations: { orderBy: { sequence: "asc" } },
+      routeVersion: { include: { route: true, operations: { include: { operation: true }, orderBy: { sequence: "asc" } } } },
+    },
   });
   if (!WORK_ORDER_TRANSITIONS[workOrder.status]?.includes(status)) {
     throw new Error(`工单不允许从「${workOrder.status}」变更为「${status}」`);
   }
   if (status === "已完工") {
-    const goodQty = workOrder.batches.reduce((sum, batch) => sum + batch.goodQty, 0);
-    if (goodQty < workOrder.planQty) throw new Error(`累计良品 ${goodQty}，尚未达到计划数量 ${workOrder.planQty}`);
+    const finalOperation = workOrder.operations.find((operation) => operation.isFinal) ?? workOrder.operations.at(-1);
+    const goodQty = finalOperation?.goodQty ?? workOrder.batches.reduce((sum, batch) => sum + batch.goodQty, 0);
+    if (!isFinalOperationComplete(goodQty, workOrder.planQty)) throw new Error(`末道工序合格数量 ${goodQty}，尚未达到计划数量 ${workOrder.planQty}`);
   }
-  await prisma.workOrder.update({ where: { id }, data: { status } });
+  if (status === "已下达") {
+    if (!workOrder.routeVersion || workOrder.routeVersion.status !== "已发布") throw new Error("工单必须绑定已发布的工艺路线版本后才能下达");
+    if (workOrder.routeVersion.effectiveFrom && workOrder.planStart < workOrder.routeVersion.effectiveFrom) throw new Error("工单计划日期早于工艺版本生效日期");
+    if (workOrder.routeVersion.effectiveTo && workOrder.planStart > workOrder.routeVersion.effectiveTo) throw new Error("工艺版本在工单计划日期已失效");
+    if (workOrder.routeVersion.operations.length === 0) throw new Error("工艺路线没有配置工序，不能下达");
+    await prisma.$transaction(async (tx) => {
+      if (workOrder.operations.length === 0) {
+        for (const [index, routeOperation] of workOrder.routeVersion!.operations.entries()) {
+          await tx.workOrderOperation.create({
+            data: {
+              workOrderId: workOrder.id,
+              routeOperationId: routeOperation.id,
+              operationId: routeOperation.operationId,
+              operationCode: routeOperation.operationCode,
+              operationName: routeOperation.operationName,
+              operationType: routeOperation.operationType,
+              sequence: routeOperation.sequence,
+              status: index === 0 ? "可开工" : "等待前序",
+              plannedQty: workOrder.planQty,
+              qualityStatus: routeOperation.qualityRequired ? "待检" : "不适用",
+              qualityRequired: routeOperation.qualityRequired,
+              isFinal: routeOperation.isFinal,
+              requiresEquipment: routeOperation.requiresEquipment,
+              requiresMold: routeOperation.requiresMold,
+              workCenter: routeOperation.workCenter,
+              reportMode: routeOperation.reportMode,
+              standardCycleSeconds: routeOperation.standardCycleSeconds,
+              planEquipmentId: routeOperation.requiresEquipment ? workOrder.planEquipmentId : null,
+              planMoldId: routeOperation.requiresMold ? workOrder.planMoldId : null,
+            },
+          });
+        }
+      } else {
+        const firstOperation = workOrder.operations[0];
+        if (firstOperation.status === "等待前序") {
+          await tx.workOrderOperation.update({ where: { id: firstOperation.id }, data: { status: "可开工" } });
+        }
+      }
+      await tx.workOrder.update({ where: { id }, data: { status: "已下达" } });
+    });
+  } else {
+    await prisma.$transaction(async (tx) => {
+      await tx.workOrder.update({ where: { id }, data: { status } });
+      if (status === "暂停") {
+        await tx.workOrderOperation.updateMany({ where: { workOrderId: id, status: "生产中" }, data: { status: "暂停" } });
+      } else if (status === "生产中" && workOrder.status === "暂停") {
+        await tx.workOrderOperation.updateMany({ where: { workOrderId: id, status: "暂停" }, data: { status: "生产中" } });
+      } else if (status === "已关闭") {
+        await tx.workOrderOperation.updateMany({ where: { workOrderId: id, status: { notIn: ["已完成", "已跳过"] } }, data: { status: "已关闭" } });
+      }
+    });
+  }
   revalidatePath("/work-orders");
   revalidatePath("/dashboard");
   revalidatePath("/injection");
   revalidatePath("/stamping");
+  revalidatePath("/operations");
 }

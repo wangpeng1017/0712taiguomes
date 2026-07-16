@@ -26,6 +26,29 @@ export default async function WorkOrdersPage() {
     batchCount: wo.batchCount,
     bomVersion: wo.bomVersion,
     route: wo.route,
+    routeVersion: wo.routeVersion ? {
+      id: wo.routeVersion.id,
+      version: wo.routeVersion.version,
+      status: wo.routeVersion.status,
+      route: { code: wo.routeVersion.route.code, name: wo.routeVersion.route.name },
+    } : null,
+    operations: wo.operations.map((operation) => ({
+      id: operation.id,
+      sequence: operation.sequence,
+      operationCode: operation.operationCode,
+      operationName: operation.operationName,
+      operationType: operation.operationType,
+      workCenter: operation.workCenter,
+      status: operation.status,
+      plannedQty: operation.plannedQty,
+      inputQty: operation.inputQty,
+      goodQty: operation.goodQty,
+      badQty: operation.badQty,
+      scrapQty: operation.scrapQty,
+      transferredQty: operation.transferredQty,
+      qualityStatus: operation.qualityStatus,
+      isFinal: operation.isFinal,
+    })),
     note: wo.note,
   }));
 
@@ -35,6 +58,17 @@ export default async function WorkOrdersPage() {
       skus={options.skus.map((s) => ({ id: s.id, code: s.code, name: s.name, type: s.type }))}
       equipments={options.equipments.map((e) => ({ id: e.id, code: e.code, name: e.name, type: e.type, status: e.status }))}
       molds={options.molds.map((m) => ({ id: m.id, code: m.code, name: m.name, type: m.type, applicableSkuId: m.applicableSkuId, status: m.status }))}
+      routeVersions={options.routeVersions.map((version) => ({
+        id: version.id,
+        version: version.version,
+        route: { code: version.route.code, name: version.route.name, skuId: version.route.skuId },
+        operations: version.operations.map((operation) => ({
+          sequence: operation.sequence,
+          operationCode: operation.operationCode,
+          operationName: operation.operationName,
+          isFinal: operation.isFinal,
+        })),
+      }))}
     />
   );
 }

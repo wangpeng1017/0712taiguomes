@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Avatar, Layout, Menu, Segmented } from "antd";
 import {
   BarChartOutlined,
+  BranchesOutlined,
   ControlOutlined,
   DashboardOutlined,
   DatabaseOutlined,
@@ -53,8 +54,19 @@ const MAIN_NAV_ITEMS: NavigationItem[] = [
     icon: <ToolOutlined />,
     children: [
       { key: "/work-orders", label: "生产工单" },
-      { key: "/injection", label: "注塑报工", icon: <ExperimentOutlined /> },
-      { key: "/stamping", label: "冲压报工", icon: <ToolOutlined /> },
+      { key: "/operations", label: "工序任务" },
+      { key: "/injection", label: "注塑生产批次", icon: <ExperimentOutlined /> },
+      { key: "/stamping", label: "冲压生产批次", icon: <ToolOutlined /> },
+    ],
+  },
+  {
+    key: "/process",
+    label: "工艺管理",
+    icon: <BranchesOutlined />,
+    children: [
+      { key: "/process/operations", label: "工序管理" },
+      { key: "/process/routes", label: "工艺路线" },
+      { key: "/process/versions", label: "路线版本 / 工序配置" },
     ],
   },
   {
@@ -74,6 +86,7 @@ const MAIN_NAV_ITEMS: NavigationItem[] = [
     label: "质量与追溯",
     icon: <SearchOutlined />,
     children: [
+      { key: "/quality", label: "过程检验 / 返工" },
       { key: "/trace/forward", label: "原材料正向追溯" },
       { key: "/trace/reverse", label: "生产批次反向追溯" },
       { key: "/trace/molds", label: "模具追溯" },

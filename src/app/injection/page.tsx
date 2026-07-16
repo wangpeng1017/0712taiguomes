@@ -29,8 +29,9 @@ export default async function InjectionPage() {
           goodQty: b.goodQty, badQty: b.badQty, issuedWeight: b.issuedWeight, returnWeight: b.returnWeight,
           scrapWeight: b.scrapWeight, thisMoldCount: b.thisMoldCount, note: b.note,
           workOrder: { no: b.workOrder.no }, sku: { name: b.sku.name, code: b.sku.code },
-          equipment: { code: b.equipment.code, name: b.equipment.name }, mold: { code: b.mold.code, name: b.mold.name },
-          materialLot: { lotNo: b.materialLot.lotNo, material: { name: b.materialLot.material.name } },
+          equipment: b.equipment ? { code: b.equipment.code, name: b.equipment.name } : { code: "-", name: "未指定设备" },
+          mold: b.mold ? { code: b.mold.code, name: b.mold.name } : { code: "-", name: "未指定模具" },
+          materialLot: b.materialLot ? { lotNo: b.materialLot.lotNo, material: { name: b.materialLot.material.name } } : { lotNo: "-", material: { name: "多批次/在制品投入" } },
           defects: b.defects.map((d) => ({ id: d.id, qty: d.qty, reason: d.reason.reason, action: d.action })),
           stockInQty: b.stockIns.filter((s) => s.type !== "不良品隔离").reduce((sum, s) => sum + s.qty, 0),
         }))}

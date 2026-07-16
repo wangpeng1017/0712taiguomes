@@ -28,30 +28,31 @@ model ProductSku {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  molds       MoldMaster[]
-  workOrders  WorkOrder[]
-  batches     ProductionBatch[]
+  molds         MoldMaster[]
+  workOrders    WorkOrder[]
+  batches       ProductionBatch[]
+  processRoutes ProcessRoute[]
 }
 
 model MaterialMaster {
-  id                 String  @id @default(cuid())
-  code               String  @unique
-  name               String
-  type               String // 塑料颗粒 / 金属卷材 / 辅料 / 其他
-  spec               String?
-  materialGrade      String? // 材质 / 材料牌号
-  supplier           String?
-  unit               String  @default("KG")
-  shelfLife          String?
-  status             String  @default("启用")
+  id                String  @id @default(cuid())
+  code              String  @unique
+  name              String
+  type              String // 塑料颗粒 / 金属卷材 / 辅料 / 其他
+  spec              String?
+  materialGrade     String? // 材质 / 材料牌号
+  supplier          String?
+  unit              String  @default("KG")
+  shelfLife         String?
+  status            String  @default("启用")
   // 金属卷材专属
-  thickness          Float?
-  width              Float?
-  coilWeight         Float?
-  surfaceTreatment   String?
+  thickness         Float?
+  width             Float?
+  coilWeight        Float?
+  surfaceTreatment  String?
   // 塑料颗粒专属
-  color              String?
-  dryingRequirement  String?
+  color             String?
+  dryingRequirement String?
 
   lots MaterialLot[]
 }
@@ -67,75 +68,200 @@ model EquipmentMaster {
   startDate DateTime?
   note      String?
 
-  molds           MoldMaster[]
-  workOrders      WorkOrder[]
-  batches         ProductionBatch[]
-  materialIssues  MaterialIssue[]
+  molds               MoldMaster[]
+  workOrders          WorkOrder[]
+  batches             ProductionBatch[]
+  materialIssues      MaterialIssue[]
+  workOrderOperations WorkOrderOperation[]
 }
 
 model MoldMaster {
-  id                     String    @id @default(cuid())
-  code                   String    @unique
-  name                   String
-  type                   String // 注塑模 / 冲压模
-  applicableSkuId        String?
-  applicableSku          ProductSku? @relation(fields: [applicableSkuId], references: [id])
-  applicableEquipmentId  String?
-  applicableEquipment    EquipmentMaster? @relation(fields: [applicableEquipmentId], references: [id])
-  designLife             Int // 设计寿命（模次/冲次）
-  currentCount           Int       @default(0)
-  maintCycle             Int // 保养周期
-  warnThreshold          Float     @default(0.8) // 预警阈值比例
-  lastMaintDate          DateTime?
-  lastMaintCount         Int       @default(0)
-  status                 String    @default("可用") // 可用/生产中/待保养/维修中/停用/报废
-  cavityCount            Int? // 模穴数或单次出件数
-  note                   String?
+  id                    String           @id @default(cuid())
+  code                  String           @unique
+  name                  String
+  type                  String // 注塑模 / 冲压模
+  applicableSkuId       String?
+  applicableSku         ProductSku?      @relation(fields: [applicableSkuId], references: [id])
+  applicableEquipmentId String?
+  applicableEquipment   EquipmentMaster? @relation(fields: [applicableEquipmentId], references: [id])
+  designLife            Int // 设计寿命（模次/冲次）
+  currentCount          Int              @default(0)
+  maintCycle            Int // 保养周期
+  warnThreshold         Float            @default(0.8) // 预警阈值比例
+  lastMaintDate         DateTime?
+  lastMaintCount        Int              @default(0)
+  status                String           @default("可用") // 可用/生产中/待保养/维修中/停用/报废
+  cavityCount           Int? // 模穴数或单次出件数
+  note                  String?
 
-  workOrders  WorkOrder[]
-  batches     ProductionBatch[]
-  maintenance MoldMaintenanceRecord[]
+  workOrders          WorkOrder[]
+  batches             ProductionBatch[]
+  maintenance         MoldMaintenanceRecord[]
+  workOrderOperations WorkOrderOperation[]
 }
 
 model DefectReason {
-  id        String   @id @default(cuid())
+  id        String @id @default(cuid())
   reason    String
   appliesTo String // 注塑 / 冲压 / 通用
-  status    String   @default("启用")
+  status    String @default("启用")
 
   defects DefectRecord[]
+}
+
+model OperationMaster {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  type        String
+  appliesTo   String   @default("通用")
+  workCenter  String?
+  description String?
+  status      String   @default("启用")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  routeOperations     RouteOperation[]
+  workOrderOperations WorkOrderOperation[]
+}
+
+model ProcessRoute {
+  id        String     @id @default(cuid())
+  code      String     @unique
+  name      String
+  skuId     String
+  sku       ProductSku @relation(fields: [skuId], references: [id])
+  status    String     @default("启用")
+  note      String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  versions ProcessRouteVersion[]
+}
+
+model ProcessRouteVersion {
+  id            String       @id @default(cuid())
+  routeId       String
+  route         ProcessRoute @relation(fields: [routeId], references: [id])
+  version       String
+  status        String       @default("草稿")
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+  releasedAt    DateTime?
+  releasedBy    String?
+  changeReason  String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  operations   RouteOperation[]
+  workOrders   WorkOrder[]
+  reworkOrders ReworkOrder[]
+
+  @@unique([routeId, version])
+}
+
+model RouteOperation {
+  id                   String              @id @default(cuid())
+  routeVersionId       String
+  routeVersion         ProcessRouteVersion @relation(fields: [routeVersionId], references: [id])
+  operationId          String
+  operation            OperationMaster     @relation(fields: [operationId], references: [id])
+  sequence             Int
+  operationCode        String
+  operationName        String
+  operationType        String
+  workCenter           String?
+  standardCycleSeconds Float?
+  setupMinutes         Float?
+  reportMode           String              @default("按批次")
+  requiresEquipment    Boolean             @default(false)
+  requiresMold         Boolean             @default(false)
+  qualityRequired      Boolean             @default(false)
+  isFinal              Boolean             @default(false)
+  status               String              @default("启用")
+  note                 String?
+
+  workOrderOperations WorkOrderOperation[]
+
+  @@unique([routeVersionId, sequence])
 }
 
 // ============ 业务单据 ============
 
 model WorkOrder {
-  id                String   @id @default(cuid())
-  no                String   @unique
-  skuId             String
-  sku               ProductSku @relation(fields: [skuId], references: [id])
-  type              String // 注塑 / 冲压（冗余自 sku.type，便于过滤）
-  planQty           Int
-  planStart         DateTime
-  planEnd           DateTime
-  planEquipmentId   String?
-  planEquipment     EquipmentMaster? @relation(fields: [planEquipmentId], references: [id])
-  planMoldId        String?
-  planMold          MoldMaster? @relation(fields: [planMoldId], references: [id])
-  bomVersion        String?
-  route             String?
-  status            String   @default("未下达") // 未下达/已下达/生产中/暂停/已完工/已关闭
-  note              String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id              String               @id @default(cuid())
+  no              String               @unique
+  skuId           String
+  sku             ProductSku           @relation(fields: [skuId], references: [id])
+  type            String // 注塑 / 冲压（冗余自 sku.type，便于过滤）
+  planQty         Int
+  planStart       DateTime
+  planEnd         DateTime
+  planEquipmentId String?
+  planEquipment   EquipmentMaster?     @relation(fields: [planEquipmentId], references: [id])
+  planMoldId      String?
+  planMold        MoldMaster?          @relation(fields: [planMoldId], references: [id])
+  bomVersion      String?
+  route           String?
+  routeVersionId  String?
+  routeVersion    ProcessRouteVersion? @relation(fields: [routeVersionId], references: [id])
+  status          String               @default("未下达") // 未下达/已下达/生产中/暂停/已完工/已关闭
+  note            String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
-  batches        ProductionBatch[]
-  materialIssues MaterialIssue[]
+  batches         ProductionBatch[]
+  operations      WorkOrderOperation[]
+  materialIssues  MaterialIssue[]
   materialReturns MaterialReturn[]
 }
 
+model WorkOrderOperation {
+  id                   String           @id @default(cuid())
+  workOrderId          String
+  workOrder            WorkOrder        @relation(fields: [workOrderId], references: [id])
+  routeOperationId     String?
+  routeOperation       RouteOperation?  @relation(fields: [routeOperationId], references: [id])
+  operationId          String
+  operation            OperationMaster  @relation(fields: [operationId], references: [id])
+  operationCode        String
+  operationName        String
+  operationType        String
+  sequence             Int
+  status               String           @default("等待前序")
+  plannedQty           Int
+  inputQty             Int              @default(0)
+  goodQty              Int              @default(0)
+  badQty               Int              @default(0)
+  scrapQty             Int              @default(0)
+  transferredQty       Int              @default(0)
+  qualityStatus        String           @default("待检")
+  isFinal              Boolean          @default(false)
+  requiresEquipment    Boolean          @default(false)
+  requiresMold         Boolean          @default(false)
+  qualityRequired      Boolean          @default(false)
+  reportMode           String           @default("按批次")
+  standardCycleSeconds Float?
+  workCenter           String?
+  planEquipmentId      String?
+  planEquipment        EquipmentMaster? @relation(fields: [planEquipmentId], references: [id])
+  planMoldId           String?
+  planMold             MoldMaster?      @relation(fields: [planMoldId], references: [id])
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  batches        ProductionBatch[]
+  qualityResults OperationQualityResult[]
+  reworkOrders   ReworkOrder[]
+
+  @@unique([workOrderId, sequence])
+}
+
 model MaterialLot {
-  id            String   @id @default(cuid())
-  lotNo         String   @unique
+  id            String         @id @default(cuid())
+  lotNo         String         @unique
   supplierLot   String?
   materialId    String
   material      MaterialMaster @relation(fields: [materialId], references: [id])
@@ -144,113 +270,192 @@ model MaterialLot {
   unit          String
   inDate        DateTime
   supplier      String?
-  inspectStatus String   @default("合格") // 待检/合格/不合格/让步接收
-  stockStatus   String   @default("可用") // 可用/冻结/隔离/已消耗
+  inspectStatus String         @default("合格") // 待检/合格/不合格/让步接收
+  stockStatus   String         @default("可用") // 可用/冻结/隔离/已消耗
   warehouse     String?
 
-  issues   MaterialIssue[]
-  returns  MaterialReturn[]
-  batches  ProductionBatch[]
+  issues            MaterialIssue[]
+  returns           MaterialReturn[]
+  batches           ProductionBatch[]
+  batchConsumptions BatchMaterialConsumption[]
 }
 
 model MaterialIssue {
-  id            String   @id @default(cuid())
+  id            String           @id @default(cuid())
   workOrderId   String
-  workOrder     WorkOrder @relation(fields: [workOrderId], references: [id])
+  workOrder     WorkOrder        @relation(fields: [workOrderId], references: [id])
   materialLotId String
-  materialLot   MaterialLot @relation(fields: [materialLotId], references: [id])
+  materialLot   MaterialLot      @relation(fields: [materialLotId], references: [id])
   qty           Float
   issuedBy      String
-  issuedAt      DateTime @default(now())
+  issuedAt      DateTime         @default(now())
   equipmentId   String?
   equipment     EquipmentMaster? @relation(fields: [equipmentId], references: [id])
   note          String?
 }
 
 model MaterialReturn {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   workOrderId   String
-  workOrder     WorkOrder @relation(fields: [workOrderId], references: [id])
+  workOrder     WorkOrder   @relation(fields: [workOrderId], references: [id])
   materialLotId String
   materialLot   MaterialLot @relation(fields: [materialLotId], references: [id])
   qty           Float
   reason        String?
-  returnedAt    DateTime @default(now())
+  returnedAt    DateTime    @default(now())
   returnedBy    String
 }
 
 model ProductionBatch {
-  id                String   @id @default(cuid())
-  batchNo           String   @unique
-  workOrderId       String
-  workOrder         WorkOrder @relation(fields: [workOrderId], references: [id])
-  skuId             String
-  sku               ProductSku @relation(fields: [skuId], references: [id])
-  type              String // 注塑 / 冲压
-  equipmentId       String
-  equipment         EquipmentMaster @relation(fields: [equipmentId], references: [id])
-  moldId            String
-  mold              MoldMaster @relation(fields: [moldId], references: [id])
-  materialLotId     String
-  materialLot       MaterialLot @relation(fields: [materialLotId], references: [id])
-  shift             String // 白班 / 夜班
-  operator          String
-  startTime         DateTime
-  endTime           DateTime?
-  issuedWeight      Float? // 本批领用重量(kg)
-  goodQty           Int      @default(0)
-  badQty            Int      @default(0)
-  scrapWeight       Float? // 注塑:水口料/报废重量；冲压:边角料重量
-  returnWeight      Float? // 注塑:退料重量；冲压:剩余卷材重量
-  thisMoldCount     Int? // 本次模次/冲次
-  status            String   @default("进行中") // 进行中/已完工/已作废
-  confirmedByLeader Boolean  @default(false)
-  leaderConfirmedBy String?
-  leaderConfirmedAt DateTime?
-  note              String?
-  createdAt         DateTime @default(now())
+  id                   String              @id @default(cuid())
+  batchNo              String              @unique
+  workOrderId          String
+  workOrder            WorkOrder           @relation(fields: [workOrderId], references: [id])
+  workOrderOperationId String?
+  workOrderOperation   WorkOrderOperation? @relation(fields: [workOrderOperationId], references: [id])
+  skuId                String
+  sku                  ProductSku          @relation(fields: [skuId], references: [id])
+  type                 String // 注塑 / 冲压
+  equipmentId          String?
+  equipment            EquipmentMaster?    @relation(fields: [equipmentId], references: [id])
+  moldId               String?
+  mold                 MoldMaster?         @relation(fields: [moldId], references: [id])
+  materialLotId        String?
+  materialLot          MaterialLot?        @relation(fields: [materialLotId], references: [id])
+  shift                String // 白班 / 夜班
+  operator             String
+  startTime            DateTime
+  endTime              DateTime?
+  issuedWeight         Float? // 本批领用重量(kg)
+  goodQty              Int                 @default(0)
+  badQty               Int                 @default(0)
+  scrapWeight          Float? // 注塑:水口料/报废重量；冲压:边角料重量
+  returnWeight         Float? // 注塑:退料重量；冲压:剩余卷材重量
+  thisMoldCount        Int? // 本次模次/冲次
+  status               String              @default("进行中") // 进行中/已完工/已作废
+  confirmedByLeader    Boolean             @default(false)
+  leaderConfirmedBy    String?
+  leaderConfirmedAt    DateTime?
+  note                 String?
+  createdAt            DateTime            @default(now())
 
-  defects  DefectRecord[]
-  stockIns StockInRecord[]
+  defects              DefectRecord[]
+  stockIns             StockInRecord[]
+  materialConsumptions BatchMaterialConsumption[] @relation("ConsumingBatch")
+  suppliedConsumptions BatchMaterialConsumption[] @relation("SourceBatchConsumption")
+  genealogySources     BatchGenealogy[]           @relation("GenealogySource")
+  genealogyTargets     BatchGenealogy[]           @relation("GenealogyTarget")
+  qualityResults       OperationQualityResult[]
+  sourceReworkOrders   ReworkOrder[]              @relation("ReworkSourceBatch")
+  resultReworkOrders   ReworkOrder[]              @relation("ReworkResultBatch")
+}
+
+model BatchMaterialConsumption {
+  id              String           @id @default(cuid())
+  batchId         String
+  batch           ProductionBatch  @relation("ConsumingBatch", fields: [batchId], references: [id])
+  materialLotId   String?
+  materialLot     MaterialLot?     @relation(fields: [materialLotId], references: [id])
+  sourceBatchId   String?
+  sourceBatch     ProductionBatch? @relation("SourceBatchConsumption", fields: [sourceBatchId], references: [id])
+  qty             Float
+  unit            String
+  consumptionType String           @default("主料")
+  createdAt       DateTime         @default(now())
+}
+
+model BatchGenealogy {
+  id            String          @id @default(cuid())
+  sourceBatchId String
+  sourceBatch   ProductionBatch @relation("GenealogySource", fields: [sourceBatchId], references: [id])
+  targetBatchId String
+  targetBatch   ProductionBatch @relation("GenealogyTarget", fields: [targetBatchId], references: [id])
+  qty           Float
+  relationType  String          @default("转序")
+  operator      String?
+  remark        String?
+  createdAt     DateTime        @default(now())
+
+  @@unique([sourceBatchId, targetBatchId, relationType])
+}
+
+model OperationQualityResult {
+  id                   String             @id @default(cuid())
+  workOrderOperationId String
+  workOrderOperation   WorkOrderOperation @relation(fields: [workOrderOperationId], references: [id])
+  batchId              String?
+  batch                ProductionBatch?   @relation(fields: [batchId], references: [id])
+  inspectionType       String             @default("工序检验")
+  result               String
+  sampleQty            Int?
+  qualifiedQty         Int?
+  unqualifiedQty       Int?
+  inspector            String
+  inspectedAt          DateTime           @default(now())
+  valuesJson           String?
+  note                 String?
+}
+
+model ReworkOrder {
+  id                   String              @id @default(cuid())
+  no                   String              @unique
+  sourceBatchId        String
+  sourceBatch          ProductionBatch     @relation("ReworkSourceBatch", fields: [sourceBatchId], references: [id])
+  workOrderOperationId String
+  workOrderOperation   WorkOrderOperation  @relation(fields: [workOrderOperationId], references: [id])
+  routeVersionId       String
+  routeVersion         ProcessRouteVersion @relation(fields: [routeVersionId], references: [id])
+  resultBatchId        String?
+  resultBatch          ProductionBatch?    @relation("ReworkResultBatch", fields: [resultBatchId], references: [id])
+  qty                  Int
+  qualifiedQty         Int                 @default(0)
+  scrapQty             Int                 @default(0)
+  reason               String
+  status               String              @default("待处理")
+  createdBy            String
+  approvedBy           String?
+  createdAt            DateTime            @default(now())
+  completedAt          DateTime?
+  note                 String?
 }
 
 model DefectRecord {
-  id           String   @id @default(cuid())
-  batchId      String
-  batch        ProductionBatch @relation(fields: [batchId], references: [id])
-  qty          Int
-  reasonId     String
-  reason       DefectReason @relation(fields: [reasonId], references: [id])
-  responsible  String? // 原材料/设备/模具/工艺/操作/其他
-  action       String? // 返工/报废/隔离/让步接收
-  recordedBy   String
-  recordedAt   DateTime @default(now())
-  note         String?
+  id          String          @id @default(cuid())
+  batchId     String
+  batch       ProductionBatch @relation(fields: [batchId], references: [id])
+  qty         Int
+  reasonId    String
+  reason      DefectReason    @relation(fields: [reasonId], references: [id])
+  responsible String? // 原材料/设备/模具/工艺/操作/其他
+  action      String? // 返工/报废/隔离/让步接收
+  recordedBy  String
+  recordedAt  DateTime        @default(now())
+  note        String?
 }
 
 model StockInRecord {
-  id        String   @id @default(cuid())
-  no        String   @unique
+  id        String          @id @default(cuid())
+  no        String          @unique
   batchId   String
   batch     ProductionBatch @relation(fields: [batchId], references: [id])
   type      String // 半成品/成品/不良品隔离
   qty       Int
   warehouse String?
   inBy      String
-  inAt      DateTime @default(now())
+  inAt      DateTime        @default(now())
 }
 
 model MoldMaintenanceRecord {
-  id             String    @id @default(cuid())
-  moldId         String
-  mold           MoldMaster @relation(fields: [moldId], references: [id])
-  maintType      String // 周期保养/异常维修/换模保养/下模保养
-  startTime      DateTime
-  endTime        DateTime?
-  person         String
-  content        String?
-  replacedParts  String?
-  result         String?
-  canContinue    Boolean   @default(true)
-  note           String?
+  id            String     @id @default(cuid())
+  moldId        String
+  mold          MoldMaster @relation(fields: [moldId], references: [id])
+  maintType     String // 周期保养/异常维修/换模保养/下模保养
+  startTime     DateTime
+  endTime       DateTime?
+  person        String
+  content       String?
+  replacedParts String?
+  result        String?
+  canContinue   Boolean    @default(true)
+  note          String?
 }

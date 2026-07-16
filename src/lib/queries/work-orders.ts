@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { totalQty } from "@/lib/production-calc";
+import { totalQty, workOrderCompletionRate } from "@/lib/production-calc";
 
 export async function getWorkOrdersWithProgress() {
   const workOrders = await prisma.workOrder.findMany({
@@ -7,31 +7,41 @@ export async function getWorkOrdersWithProgress() {
       sku: true,
       planEquipment: true,
       planMold: true,
+      routeVersion: { include: { route: true } },
+      operations: { orderBy: { sequence: "asc" } },
       batches: { where: { status: "已完工" }, select: { goodQty: true, badQty: true } },
     },
     orderBy: { createdAt: "desc" },
   });
 
   return workOrders.map((wo) => {
-    const goodQty = wo.batches.reduce((s, b) => s + b.goodQty, 0);
-    const badQty = wo.batches.reduce((s, b) => s + b.badQty, 0);
-    const produced = totalQty(goodQty, badQty);
+    const finalOperation = wo.operations.find((operation) => operation.isFinal) ?? wo.operations.at(-1);
+    const goodQty = finalOperation?.goodQty ?? wo.batches.reduce((s, b) => s + b.goodQty, 0);
+    const badQty = wo.operations.length
+      ? wo.operations.reduce((sum, operation) => sum + operation.badQty, 0)
+      : wo.batches.reduce((s, b) => s + b.badQty, 0);
+    const produced = finalOperation ? totalQty(finalOperation.goodQty, finalOperation.badQty) : totalQty(goodQty, badQty);
     return {
       ...wo,
       goodQty,
       badQty,
       produced,
-      completionRate: wo.planQty > 0 ? goodQty / wo.planQty : 0,
+      completionRate: workOrderCompletionRate(goodQty, wo.planQty),
       batchCount: wo.batches.length,
     };
   });
 }
 
 export async function getWorkOrderFormOptions() {
-  const [skus, equipments, molds] = await Promise.all([
+  const [skus, equipments, molds, routeVersions] = await Promise.all([
     prisma.productSku.findMany({ where: { status: "启用" }, orderBy: { code: "asc" } }),
     prisma.equipmentMaster.findMany({ orderBy: { code: "asc" } }),
     prisma.moldMaster.findMany({ orderBy: { code: "asc" } }),
+    prisma.processRouteVersion.findMany({
+      where: { status: "已发布", route: { status: "启用" } },
+      include: { route: { include: { sku: true } }, operations: { orderBy: { sequence: "asc" } } },
+      orderBy: [{ route: { code: "asc" } }, { version: "desc" }],
+    }),
   ]);
-  return { skus, equipments, molds };
+  return { skus, equipments, molds, routeVersions };
 }

@@ -21,7 +21,11 @@ export async function getMaterialReturns() {
 export async function getStockInData() {
   const [batches, stockIns] = await Promise.all([
     prisma.productionBatch.findMany({
-      where: { status: "已完工", OR: [{ goodQty: { gt: 0 } }, { badQty: { gt: 0 } }] },
+      where: {
+        status: "已完工",
+        OR: [{ goodQty: { gt: 0 } }, { badQty: { gt: 0 } }],
+        AND: [{ OR: [{ workOrderOperationId: null }, { workOrderOperation: { isFinal: true } }] }],
+      },
       include: { sku: true, workOrder: true, stockIns: true },
       orderBy: { startTime: "desc" },
     }),
